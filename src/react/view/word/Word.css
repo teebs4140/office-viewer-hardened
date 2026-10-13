@@ -62,14 +62,47 @@ html:has(.word-viewer) {
     min-height: 0;
 }
 
-.word-readonly-banner {
-    flex-shrink: 0;
-    padding: 6px 16px;
-    text-align: center;
+/* Zoom control (the editor's own toolbar is hidden in read-only mode) */
+.word-viewer .word-zoom-control {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid rgba(128, 128, 128, 0.4);
+    border-radius: 6px;
+    background-color: rgba(255, 255, 255, 0.85);
+    color: #2c3e50;
     font-size: 12px;
-    color: rgba(0, 0, 0, 0.65);
-    background: #fffbe6;
-    border-bottom: 1px solid #ffe58f;
+}
+
+.word-viewer .word-zoom-control button {
+    min-width: 28px;
+    height: 26px;
+    padding: 0 6px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.word-viewer .word-zoom-control button:hover:not(:disabled) {
+    background-color: rgba(0, 0, 0, 0.06);
+}
+
+.word-viewer .word-zoom-control button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.word-viewer .word-zoom-control .word-zoom-value {
+    min-width: 46px;
+    font-variant-numeric: tabular-nums;
 }
 
 /* ── 亮暗切换按钮（样式参考 Excel）──── */
@@ -106,10 +139,14 @@ html:has(.word-viewer) {
     background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
 }
 
-.word-viewer--vscode-theme .word-readonly-banner {
-    color: var(--vscode-editorWarning-foreground);
-    background: color-mix(in srgb, var(--vscode-editorWarning-foreground) 14%, var(--vscode-editor-background));
-    border-bottom-color: var(--vscode-panel-border, var(--vscode-editorWidget-border));
+.word-viewer--vscode-theme .word-zoom-control {
+    background-color: var(--vscode-editorWidget-background, #252526);
+    color: var(--vscode-editor-foreground, #cccccc);
+    border-color: var(--vscode-editorWidget-border, rgba(128, 128, 128, 0.45));
+}
+
+.word-viewer--vscode-theme .word-zoom-control button:hover:not(:disabled) {
+    background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
 }
 
 /* ── VS Code 主题 → docx-editor（变量定义在 .ep-root 上）── */

@@ -141,6 +141,7 @@ export default {
   viewer: {
     saveSuccess: '保存成功',
     protectedCell: '被保护单元格不支持此功能',
+    linkBlocked: '未打开链接：仅支持打开 http、https 和 mailto 链接',
     readonlyBanner: '只读模式 — 可浏览与查找，请使用「另存为」保存更改',
     formatCannotPreserveTitle: '格式将无法保存',
     formatCannotPreserveContent: '{} 格式不支持保存样式、合并单元格、公式等富格式内容。是否另存为 xlsx？',

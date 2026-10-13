@@ -46,22 +46,10 @@ export function mergeHyperlinkMaps(...maps: HyperlinkMap[]): HyperlinkMap {
     return out;
 }
 
-export function writeCellHyperlink(
-    cell: ExcelJS.Cell,
-    text: string,
-    hyperlink?: SpreadsheetHyperlink,
-) {
-    if (!hyperlink?.link) return;
-    cell.value = {
-        text: text || hyperlink.link,
-        hyperlink: hyperlink.link,
-        ...(hyperlink.tooltip ? { tooltip: hyperlink.tooltip } : {}),
-    };
-}
-
 export type ParsedLink =
     | { type: 'external'; url: string }
-    | { type: 'internal'; sheetName: string; ref: string };
+    | { type: 'internal'; sheetName: string; ref: string }
+    | { type: 'unsupported' };
 
 export function parseSpreadsheetLink(link: string): ParsedLink {
     const trimmed = link.trim();
@@ -76,5 +64,7 @@ export function parseSpreadsheetLink(link: string): ParsedLink {
     if (plain) {
         return { type: 'internal', sheetName: plain[1], ref: plain[2].toUpperCase() };
     }
-    return { type: 'external', url: trimmed };
+    // Hyperlink targets come from the workbook: anything that is not http(s)/mailto or an
+    // in-workbook reference (javascript:, data:, file:, vscode:, command:, UNC paths, ...) is not opened.
+    return { type: 'unsupported' };
 }

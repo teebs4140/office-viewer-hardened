@@ -141,6 +141,7 @@ export default {
   viewer: {
     saveSuccess: 'Save done',
     protectedCell: 'Protected cells do not support this function',
+    linkBlocked: 'Link not opened: only http, https and mailto links can be opened',
     readonlyBanner: 'Read-only — browse and find; use Save As to save changes',
     formatCannotPreserveTitle: 'Formatting cannot be preserved',
     formatCannotPreserveContent: '{} cannot preserve styles, merges, formulas, etc. Save as xlsx instead?',

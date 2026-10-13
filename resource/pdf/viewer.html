@@ -23,6 +23,8 @@ See https://github.com/adobe-type-tools/cmap-resources
 <html dir="ltr" mozdisallowselectionprint>
 
 <head>
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src {{cspSource}}; style-src {{cspSource}} 'unsafe-inline'; img-src {{cspSource}} data: blob:; font-src {{cspSource}} data:; connect-src {{cspSource}}; frame-src 'none'; object-src 'none'; base-uri {{cspSource}}; form-action 'none'">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <meta name="google" content="notranslate">
@@ -121,7 +123,7 @@ See https://github.com/adobe-type-tools/cmap-resources
           </button>
 
           <button id="secondaryOpenFile" class="secondaryToolbarButton openFile visibleLargeView" title="Open File"
-            tabindex="52" data-l10n-id="open_file">
+            tabindex="52" hidden="true" data-l10n-id="open_file">
             <span data-l10n-id="open_file_label">Open</span>
           </button>
 
@@ -131,12 +133,12 @@ See https://github.com/adobe-type-tools/cmap-resources
           </button>
 
           <button id="secondaryDownload" class="secondaryToolbarButton download visibleMediumView" title="Download"
-            tabindex="54" data-l10n-id="download">
+            tabindex="54" hidden="true" data-l10n-id="download">
             <span data-l10n-id="download_label">Download</span>
           </button>
 
           <a href="#" id="secondaryViewBookmark" class="secondaryToolbarButton bookmark visibleSmallView"
-            title="Current view (copy or open in new window)" tabindex="55" data-l10n-id="bookmark">
+            title="Current view (copy or open in new window)" tabindex="55" hidden="true" data-l10n-id="bookmark">
             <span data-l10n-id="bookmark_label">Current View</span>
           </a>
 
@@ -244,7 +246,7 @@ See https://github.com/adobe-type-tools/cmap-resources
                 <span data-l10n-id="presentation_mode_label">Presentation Mode</span>
               </button>
 
-              <button id="openFile" class="toolbarButton openFile hiddenLargeView" title="Open File" tabindex="32"
+              <button id="openFile" class="toolbarButton openFile hiddenLargeView" title="Open File" tabindex="32" hidden="true"
                 data-l10n-id="open_file">
                 <span data-l10n-id="open_file_label">Open</span>
               </button>
@@ -254,12 +256,12 @@ See https://github.com/adobe-type-tools/cmap-resources
                 <span data-l10n-id="print_label">Print</span>
               </button>
 
-              <button id="download" class="toolbarButton download hiddenMediumView" title="Download" tabindex="34"
+              <button id="download" class="toolbarButton download hiddenMediumView" title="Download" tabindex="34" hidden="true"
                 data-l10n-id="download">
                 <span data-l10n-id="download_label">Download</span>
               </button>
               <a href="#" id="viewBookmark" class="toolbarButton bookmark hiddenSmallView"
-                title="Current view (copy or open in new window)" tabindex="35" data-l10n-id="bookmark">
+                title="Current view (copy or open in new window)" tabindex="35" hidden="true" data-l10n-id="bookmark">
                 <span data-l10n-id="bookmark_label">Current View</span>
               </a>
 

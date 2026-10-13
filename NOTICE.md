@@ -1,0 +1,59 @@
+# Attribution and provenance
+
+## Upstream project
+
+This extension is a fork of **Office Viewer** by Weijan Chen.
+
+- Upstream source: https://github.com/cweijan/vscode-office
+- Upstream Marketplace listing: `cweijan.vscode-office`
+- Forked from upstream version **4.2.0** (commit `09df4e7`)
+- License: MIT (unchanged; see `LICENSE`)
+
+All credit for the original design and implementation belongs to the upstream author: the
+spreadsheet viewer, the Word viewer integration, the PDF viewer integration and the rest of the
+extension. This fork removes most of the upstream features and changes how the remaining viewers
+handle untrusted content. It is not affiliated with or endorsed by the upstream author.
+
+## Why this fork exists
+
+The upstream extension was reviewed before internal use, as an alternative to another document
+viewer. That review found **no malware**, and none of the extension's process launches on Linux
+take a file name through a shell. It did find problems that matter when files come from
+outside your organisation:
+
+- None of the upstream webviews set a Content Security Policy.
+- The PDF viewer bundles pdf.js 3.1.81 with `isEvalSupported` enabled, which meets the conditions
+  for CVE-2024-4367 (script execution from a crafted PDF).
+- The spreadsheet cell editor inserts raw cell text as HTML.
+- The Markdown editor can read any file on the machine and accepts an "execute any command"
+  message from its page.
+- Telemetry is on by default.
+
+This fork keeps only the CSV/TSV, Excel (.xlsx/.xlsm), Word (.docx/.dotx) and PDF viewers and
+hardens them. See `CHANGELOG.md` for the specifics and `SECURITY.md` for the threat model.
+
+This fork exists to carry those changes, not because the upstream project is untrustworthy.
+The fixes are offered upstream.
+
+## Provenance note
+
+The upstream Marketplace build of 4.2.0 contains code that is not in the upstream public
+repository: a paid "Pro" licence module, PDF editing tools and a Markdown export dialog. This fork
+is built only from the public repository, so none of that code is included. This is recorded as a
+plain fact about what could and could not be reviewed, not as an allegation of wrongdoing.
+
+## Bundled third-party components
+
+Viewer code bundled into the extension, all from the npm registry:
+
+- `@cweijan/exceljs`: reads .xlsx/.xlsm workbooks
+- `udsv` and `iconv-lite`: CSV/TSV parsing and text encodings
+- `@eigenpal/docx-editor-react` (with its `prosemirror-*` peers): renders .docx/.dotx
+- `antd`, `@ant-design/icons`, `react`, `react-dom`, `@vscode/codicons`: user interface
+- `jszip`, `buffer`: support libraries
+
+The spreadsheet grid is a modified copy of `x-spreadsheet` by myliang
+(https://github.com/myliang/x-spreadsheet, MIT), carried in the upstream source tree. The PDF viewer is a customised build of Mozilla's pdf.js 3.1.81 (Apache-2.0), also carried
+in the upstream source tree under `resource/pdf/`.
+
+Exact versions are pinned in `package-lock.json`.

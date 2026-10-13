@@ -41,13 +41,19 @@ function buildMenuItem(item) {
     );
 }
 
-function buildMenu() {
-  return menuItems.map(it => buildMenuItem.call(this, it));
+// Read mode only offers actions that leave the workbook untouched.
+const READ_MODE_ITEMS = new Set(['copy']);
+
+function buildMenu(readOnly) {
+  const items = readOnly ? menuItems.filter(it => READ_MODE_ITEMS.has(it.key)) : menuItems;
+  return items.map(it => ({ key: it.key, el: buildMenuItem.call(this, it) }));
 }
 
 export default class ContextMenu {
-  constructor(viewFn, isHide = false) {
-    this.menuItems = buildMenu.call(this);
+  constructor(viewFn, isHide = false, readOnly = false) {
+    const entries = buildMenu.call(this, readOnly);
+    this.menuItems = entries.map(it => it.el);
+    this.hideItemEl = entries.find(it => it.key === 'hide')?.el ?? null;
     this.el = h('div', `${cssPrefix}-contextmenu`)
       .children(...this.menuItems)
       .hide();
@@ -60,7 +66,8 @@ export default class ContextMenu {
   // row-col: the whole rows or the whole cols
   // range: select range
   setMode(mode) {
-    const hideEl = this.menuItems[12];
+    const hideEl = this.hideItemEl;
+    if (!hideEl) return;
     if (mode === 'row-col') {
       hideEl.css('display', 'flex');
     } else {

@@ -83,6 +83,7 @@ export default {
   viewer: {
     saveSuccess: 'Opgeslagen',
     protectedCell: 'Beschermde cellen ondersteunen deze functie niet',
+    linkBlocked: 'Link niet geopend: alleen http-, https- en mailto-links kunnen worden geopend',
     readonlyBanner: 'Alleen-lezen — bladeren en zoeken; gebruik Opslaan als om wijzigingen op te slaan',
     formatCannotPreserveTitle: 'Opmaak kan niet behouden blijven',
     formatCannotPreserveContent: '{} kan stijlen, samenvoegingen, formules enz. niet behouden. Opslaan als xlsx?',

@@ -44,7 +44,8 @@ export default class Dropdown extends Element {
   }
 
   setTitle(title) {
-    this.title.html(title);
+    // Titles include the selected cell's font name, which comes from the file.
+    this.title.text(title);
     this.hide();
   }
 

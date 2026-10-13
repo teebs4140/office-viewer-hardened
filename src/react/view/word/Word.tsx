@@ -1,11 +1,25 @@
-import { MoonOutlined, SunOutlined } from "@ant-design/icons";
+import { MoonOutlined, SunOutlined, ZoomInOutlined, ZoomOutOutlined } from "@ant-design/icons";
 import { Alert, Spin } from "antd";
+import { setGoogleFontsEnabled } from "@eigenpal/docx-editor-core";
 import { DocxEditor, type DocxEditorRef } from "@eigenpal/docx-editor-react";
 import "@eigenpal/docx-editor-react/styles.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { handler, vscodeApi } from "../../util/vscode";
 import { loadOfficeBuffer } from "../../util/loadOfficeContent";
 import "./Word.css";
+
+// The editor fetches any font a document names from fonts.googleapis.com by default.
+// Turn that off before anything renders: a viewer must not make remote requests
+// (the CSP blocks them too). Missing fonts fall back to locally installed ones.
+setGoogleFontsEnabled(false);
+
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 4;
+const ZOOM_STEP = 0.1;
+
+function clampZoom(zoom: number): number {
+    return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(zoom * 100) / 100));
+}
 
 type WordColorMode = "light" | "adaptive";
 
@@ -47,11 +61,10 @@ interface WordOpenPayload {
 
 export default function Word() {
     const editorRef = useRef<DocxEditorRef>(null);
-    const readOnlyRef = useRef(false);
     const [colorMode, setColorMode] = useState<WordColorMode>(loadWordColorMode);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [readOnly, setReadOnly] = useState(false);
+    const [zoom, setZoom] = useState(1);
     const [documentBuffer, setDocumentBuffer] = useState<ArrayBuffer | undefined>(undefined);
     const [documentKey, setDocumentKey] = useState("");
     const [fileName, setFileName] = useState("");
@@ -68,22 +81,16 @@ export default function Word() {
         });
     };
 
-    const emitSave = useCallback((buffer: ArrayBuffer) => {
-        const bytes = new Uint8Array(buffer);
-        const content: number[] = new Array(bytes.length);
-        for (let i = 0; i < bytes.length; i++) {
-            content[i] = bytes[i];
-        }
-        handler.emit("save", content);
+    // Read-only mode hides the editor toolbar and its zoom control, so zoom lives here.
+    const applyZoom = useCallback((next: number) => {
+        const value = clampZoom(next);
+        editorRef.current?.setZoom(value);
+        setZoom(value);
     }, []);
 
-    const handleSave = useCallback(async () => {
-        const buffer = await editorRef.current?.save();
-        if (!buffer) {
-            return;
-        }
-        emitSave(buffer);
-    }, [emitSave]);
+    const zoomBy = useCallback((delta: number) => {
+        applyZoom((editorRef.current?.getZoom() ?? zoom) + delta);
+    }, [applyZoom, zoom]);
 
     const loadDocument = useCallback(async (payload: WordOpenPayload) => {
         setLoading(true);
@@ -91,9 +98,7 @@ export default function Word() {
         setDocumentBuffer(undefined);
 
         try {
-            const fileReadOnly = payload.readOnly === true;
-            readOnlyRef.current = fileReadOnly;
-            setReadOnly(fileReadOnly);
+            setZoom(1);
             setFileName(payload.fileName ?? "");
             setDocumentKey(`${payload.documentCacheId ?? ""}-${payload.nonce ?? Date.now()}`);
             skipCommentsAutoOpenRef.current = true;
@@ -116,15 +121,14 @@ export default function Word() {
     }, [loadDocument]);
 
     useEffect(() => {
-        const onKeyDown = (e: KeyboardEvent) => {
-            if ((e.ctrlKey || e.metaKey) && e.code === "KeyS") {
-                e.preventDefault();
-                void handleSave();
-            }
+        const onWheel = (e: WheelEvent) => {
+            if (!(e.ctrlKey || e.metaKey) || !editorRef.current) return;
+            e.preventDefault();
+            zoomBy(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
         };
-        window.addEventListener("keydown", onKeyDown);
-        return () => window.removeEventListener("keydown", onKeyDown);
-    }, [handleSave]);
+        window.addEventListener("wheel", onWheel, { passive: false });
+        return () => window.removeEventListener("wheel", onWheel);
+    }, [zoomBy]);
 
     return (
         <div className={`word-viewer${adaptiveColorMode ? " word-viewer--vscode-theme" : ""}`}>
@@ -139,8 +143,21 @@ export default function Word() {
             </button>
             <Spin spinning={loading} fullscreen />
             {error && <Alert type="error" message={error} showIcon style={{ margin: 16 }} />}
-            {readOnly && !loading && !error && documentBuffer && (
-                <div className="word-readonly-banner">Read-only — edits will be saved to a new file</div>
+            {documentBuffer && !loading && !error && (
+                <div className="word-zoom-control" role="group" aria-label="Zoom">
+                    <button type="button" title="Zoom out (Ctrl+wheel)" aria-label="Zoom out"
+                        disabled={zoom <= ZOOM_MIN} onClick={() => zoomBy(-ZOOM_STEP)}>
+                        <ZoomOutOutlined />
+                    </button>
+                    <button type="button" className="word-zoom-value" title="Reset zoom" aria-label="Reset zoom"
+                        onClick={() => applyZoom(1)}>
+                        {Math.round(zoom * 100)}%
+                    </button>
+                    <button type="button" title="Zoom in (Ctrl+wheel)" aria-label="Zoom in"
+                        disabled={zoom >= ZOOM_MAX} onClick={() => zoomBy(ZOOM_STEP)}>
+                        <ZoomInOutlined />
+                    </button>
+                </div>
             )}
             {documentBuffer && !loading && !error && (
                 <>
@@ -151,8 +168,9 @@ export default function Word() {
                         documentBuffer={documentBuffer}
                         documentName={fileName}
                         documentNameEditable={false}
-                        readOnly={readOnly}
-                        {...(readOnly ? { mode: "viewing" as const } : {})}
+                        // Read-only viewer: no toolbar, no editing; Ctrl+F find still works.
+                        readOnly
+                        mode="viewing"
                         commentsSidebarOpen={commentsSidebarOpen}
                         onCommentsSidebarOpenChange={(open) => {
                             if (open && skipCommentsAutoOpenRef.current) {
@@ -164,12 +182,6 @@ export default function Word() {
                         colorMode="light"
                         showFileOpen={false}
                         showHelpMenu={false}
-                        onChange={() => {
-                            if (!readOnlyRef.current) {
-                                handler.emit("change");
-                            }
-                        }}
-                        onSave={emitSave}
                     />
                 </>
             )}

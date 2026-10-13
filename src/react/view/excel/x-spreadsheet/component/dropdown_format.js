@@ -18,7 +18,7 @@ export default class DropdownFormat extends Dropdown {
             this.setTitle(it.title());
             this.change(it);
           });
-        if (it.label) item.child(h('div', 'label').html(it.label));
+        if (it.label) item.child(h('div', 'label').text(it.label));
       }
       return item;
     });
@@ -28,7 +28,7 @@ export default class DropdownFormat extends Dropdown {
   setTitle(key) {
     for (let i = 0; i < baseFormats.length; i += 1) {
       if (baseFormats[i].key === key) {
-        this.title.html(baseFormats[i].title());
+        this.title.text(baseFormats[i].title());
       }
     }
     this.hide();

@@ -1,4 +1,3 @@
-import axios from 'axios';
 import * as vscode from 'vscode';
 import { extensionResource, getExtensionUri, readExtensionText } from './extensionResource';
 
@@ -10,42 +9,40 @@ export class ReactApp {
 
     private static context: vscode.ExtensionContext;
     private static webviewUri: vscode.Uri;
-    public static IS_DEV = false;
 
     public static init(context: vscode.ExtensionContext) {
         this.context = context;
         this.webviewUri = extensionResource(context, 'out', 'webview');
-        this.IS_DEV = context.extensionMode == vscode.ExtensionMode.Development;
     }
 
     public static async view(webview: vscode.Webview, option: ViewOption) {
-        const html = await this.readContent();
+        const html = await readExtensionText(this.context, 'out', 'webview', 'index.html');
+        const configs = ReactApp.serializeConfigs({
+            ...option,
+            language: vscode.env.language,
+        });
+        // Function replacers: string replacements would interpret `$&`, `$1`, ... in the inserted text.
         webview.html = this.buildPath(html, webview)
-            .replace(`{{configs}}`, JSON.stringify({
-                ...option,
-                language: vscode.env.language,
-            }));
+            .split('{{cspSource}}').join(webview.cspSource)
+            .replace('{{configs}}', () => configs);
     }
 
-    private static async readContent(): Promise<string> {
-        if (this.IS_DEV) {
-            const devServerUrl = 'http://127.0.0.1:5739';
-            const data: string = (await axios.get(`${devServerUrl}/index.html`, { transformResponse: [] })).data;
-            return data.replace(/(["'])\/(?=(?:@|src\/|index\.html\?))/g, `$1${devServerUrl}/`);
-        }
-        return readExtensionText(this.context, 'out', 'webview', 'index.html');
+    /**
+     * The configs land inside <script type="application/json">, which the CSP never executes.
+     * Escaping `<` (and the JS line separators) keeps the JSON from closing the script element.
+     */
+    private static serializeConfigs(configs: object): string {
+        return JSON.stringify(configs)
+            .replace(/</g, '\\u003c')
+            .replace(/>/g, '\\u003e')
+            .replace(/&/g, '\\u0026')
+            .replace(/\u2028/g, '\\u2028')
+            .replace(/\u2029/g, '\\u2029');
     }
 
     private static buildPath(data: string, webview: vscode.Webview): string {
-        const baseUrl = ReactApp.getBaseUrl(webview);
-        return data.replace('<base href="/">', `<base href="${baseUrl}/">`);
-    }
-
-    private static getBaseUrl(webview: vscode.Webview) {
-        if (this.IS_DEV) {
-            return `http://127.0.0.1:5739`;
-        }
-        return webview.asWebviewUri(this.webviewUri).toString();
+        const baseUrl = webview.asWebviewUri(this.webviewUri).toString();
+        return data.replace('<base href="/">', () => `<base href="${baseUrl}/">`);
     }
 
     public static getExtensionUri(): vscode.Uri {

@@ -14,7 +14,7 @@ export default class FormSelect {
       this.vchange(it.key);
     }, width, this.el);
     this.el.children(
-      this.itemEl = h('div', 'input-text').html(this.getTitle(key)),
+      this.itemEl = h('div', 'input-text').text(this.getTitle(key)),
       this.suggest.el,
     ).on('click', () => this.show());
   }
@@ -25,13 +25,13 @@ export default class FormSelect {
 
   itemClick(it) {
     this.key = it;
-    this.itemEl.html(this.getTitle(it));
+    this.itemEl.text(this.getTitle(it));
   }
 
   val(v) {
     if (v !== undefined) {
       this.key = v;
-      this.itemEl.html(this.getTitle(v));
+      this.itemEl.text(this.getTitle(v));
       return this;
     }
     return this.key;

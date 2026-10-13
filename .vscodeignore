@@ -1,6 +1,7 @@
 .vscode/**
 .vscode-test/**
 .github/**
+test/**
 .idea/
 src/**
 node_modules/

@@ -406,11 +406,6 @@ export class Spreadsheet {
         return this;
     }
 
-    setSaveEnabled(enabled: boolean): this {
-        (this.sheet as any).toolbar.setSaveEnabled(enabled);
-        return this;
-    }
-
     getActiveSheetIndex(): number {
         if (this.bottombar === null) return 0;
         const bar = this.bottombar as any;
@@ -569,10 +564,7 @@ export class Spreadsheet {
 
     followHyperlink(payload: { link: string }): this {
         const parsed = parseSpreadsheetLink(payload.link);
-        if (parsed.type === 'external') {
-            this.sheet.trigger('open-external-link', parsed.url);
-            return this;
-        }
+        if (parsed.type !== 'internal') return this;
         const sheetIndex = this.datas.findIndex((d) => d.name === parsed.sheetName);
         if (sheetIndex < 0) return this;
         const [ci, ri] = expr2xy(parsed.ref);

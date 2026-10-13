@@ -211,12 +211,22 @@ class Element {
     return this;
   }
 
+  // Parses markup: only for static strings from this codebase, never for document content.
   html(content) {
     if (content !== undefined) {
       this.el.innerHTML = content;
       return this;
     }
     return this.el.innerHTML;
+  }
+
+  // Plain text (textContent); use for anything that may come from the opened file.
+  text(content) {
+    if (content !== undefined) {
+      this.el.textContent = `${content ?? ''}`;
+      return this;
+    }
+    return this.el.textContent;
   }
 
   val(v) {

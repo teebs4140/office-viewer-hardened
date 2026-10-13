@@ -32,30 +32,40 @@ export class Handler {
         return this;
     }
 
-    public static bind(panel: WebviewPanel, uri: vscode.Uri): Handler {
+    /**
+     * Binds a webview panel to a host-side event emitter.
+     * Only message types in `allowedTypes` are forwarded from the webview; host-internal
+     * events (fileChange, dispose) are emitted by the host alone and can never be triggered
+     * by the page.
+     */
+    public static bind(panel: WebviewPanel, uri: vscode.Uri, allowedTypes: ReadonlySet<string>): Handler {
         const eventEmitter = new SimpleEventEmitter();
 
         const fileWatcher = Handler.createFileWatcher(uri);
-        fileWatcher?.onDidChange(e => {
-            eventEmitter.emit("fileChange", e)
+        fileWatcher?.onDidChange(() => {
+            eventEmitter.emit("fileChange")
         })
 
-        const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(e => {
-            if (e.document.uri.toString() === uri.toString() && e.contentChanges.length > 0) {
-                eventEmitter.emit("externalUpdate", e)
-            }
-        });
         const handle = new Handler(panel, eventEmitter)
         panel.onDidDispose(() => {
             handle.isEnd = true;
             fileWatcher?.dispose()
-            changeDocumentSubscription.dispose()
             eventEmitter.emit("dispose")
         });
 
-        // bind from webview
-        panel.webview.onDidReceiveMessage((message) => {
-            eventEmitter.emit(message.type, message.content)
+        // bind from webview: explicit allowlist only
+        const loggedRejections = new Set<string>();
+        panel.webview.onDidReceiveMessage((message: unknown) => {
+            const type = (message && typeof message === 'object') ? (message as { type?: unknown }).type : undefined;
+            if (typeof type !== 'string' || !allowedTypes.has(type)) {
+                const label = typeof type === 'string' ? JSON.stringify(type.slice(0, 64)) : typeof type;
+                if (!loggedRejections.has(label) && loggedRejections.size < 32) {
+                    loggedRejections.add(label);
+                    Output.debug(`Ignored webview message of type ${label}`)
+                }
+                return;
+            }
+            eventEmitter.emit(type, (message as { content?: unknown }).content)
         })
         return handle;
     }

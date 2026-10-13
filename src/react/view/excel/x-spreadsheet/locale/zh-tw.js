@@ -141,6 +141,7 @@ export default {
   viewer: {
     saveSuccess: '儲存成功',
     protectedCell: '受保護的儲存格不支援此功能',
+    linkBlocked: '未開啟連結：僅支援開啟 http、https 和 mailto 連結',
     readonlyBanner: '唯讀模式 — 可瀏覽與尋找，請使用「另存新檔」儲存變更',
     formatCannotPreserveTitle: '格式將無法保留',
     formatCannotPreserveContent: '{} 格式不支援儲存樣式、合併儲存格、公式等豐富格式內容。是否另存為 xlsx？',

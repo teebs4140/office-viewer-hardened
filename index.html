@@ -3,13 +3,14 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src {{cspSource}}; style-src {{cspSource}} 'unsafe-inline'; img-src {{cspSource}} data: blob:; font-src {{cspSource}} data:; connect-src {{cspSource}}; worker-src {{cspSource}} blob:; frame-src 'none'; object-src 'none'; base-uri {{cspSource}}; form-action 'none';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta id="office-configs" data-config='{{configs}}'>
   <base href="/">
   <title>Office Viewer (Hardened)</title>
 </head>
 
 <body>
+  <script type="application/json" id="office-configs">{{configs}}</script>
   <div id="root"></div>
   <script type="module" src="/src/react/main.tsx"></script>
 </body>

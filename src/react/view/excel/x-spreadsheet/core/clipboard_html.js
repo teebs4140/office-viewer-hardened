@@ -178,7 +178,7 @@ function styleToCss(style, defaultStyle) {
 
 function formatCellHtml(text, style, defaultStyle, extraAttrs = '') {
   const css = styleToCss(style, defaultStyle);
-  const styleAttr = css ? ` style="${css}"` : '';
+  const styleAttr = css ? ` style="${escapeHtml(css)}"` : '';
   const body = style.textwrap
     ? escapeHtml(text)
     : escapeHtml(text).replace(/\n/g, '<br>');

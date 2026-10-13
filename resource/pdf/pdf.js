@@ -1022,7 +1022,8 @@ function getDocument(src) {
   params.ignoreErrors = params.stopAtErrors !== true;
   params.fontExtraProperties = params.fontExtraProperties === true;
   params.pdfBug = params.pdfBug === true;
-  params.enableXfa = params.enableXfa === true;
+  // Office Viewer (Hardened): XFA forms are never rendered, whatever the caller passes.
+  params.enableXfa = false;
   if (!Number.isInteger(params.rangeChunkSize) || params.rangeChunkSize < 1) {
     params.rangeChunkSize = DEFAULT_RANGE_CHUNK_SIZE;
   }
@@ -1041,9 +1042,9 @@ function getDocument(src) {
   if (typeof params.useWorkerFetch !== "boolean") {
     params.useWorkerFetch = params.CMapReaderFactory === _display_utils.DOMCMapReaderFactory && params.StandardFontDataFactory === _display_utils.DOMStandardFontDataFactory;
   }
-  if (typeof params.isEvalSupported !== "boolean") {
-    params.isEvalSupported = true;
-  }
+  // Office Viewer (Hardened): never compile font glyphs or PostScript functions with
+  // `new Function` (CVE-2024-4367 conditions), whatever the caller passes.
+  params.isEvalSupported = false;
   if (typeof params.isOffscreenCanvasSupported !== "boolean") {
     params.isOffscreenCanvasSupported = !_is_node.isNodeJS;
   }
@@ -4717,7 +4718,8 @@ class FontFaceObject {
     for (const i in translatedData) {
       this[i] = translatedData[i];
     }
-    this.isEvalSupported = isEvalSupported !== false;
+    // Office Viewer (Hardened): glyph paths are never compiled with `new Function`.
+    this.isEvalSupported = false;
     this.disableFontFace = disableFontFace === true;
     this.ignoreErrors = ignoreErrors === true;
     this._onUnsupportedFeature = onUnsupportedFeature;

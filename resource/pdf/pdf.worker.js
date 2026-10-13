@@ -2417,7 +2417,7 @@ class LocalPdfManager extends BasePdfManager {
     this._docBaseUrl = parseDocBaseUrl(docBaseUrl);
     this.msgHandler = msgHandler;
     this.evaluatorOptions = evaluatorOptions;
-    this.enableXfa = enableXfa;
+    this.enableXfa = false; // Office Viewer (Hardened): XFA is never rendered.
     const stream = new _stream.Stream(data);
     this.pdfDocument = new _document.PDFDocument(this, stream);
     this._loadedStreamPromise = Promise.resolve(stream);
@@ -2446,7 +2446,7 @@ class NetworkPdfManager extends BasePdfManager {
     this._docBaseUrl = parseDocBaseUrl(docBaseUrl);
     this.msgHandler = args.msgHandler;
     this.evaluatorOptions = evaluatorOptions;
-    this.enableXfa = enableXfa;
+    this.enableXfa = false; // Office Viewer (Hardened): XFA is never rendered.
     this.streamManager = new _chunked_stream.ChunkedStreamManager(pdfNetworkStream, {
       msgHandler: args.msgHandler,
       length: args.length,
@@ -8323,7 +8323,7 @@ const DefaultPartialEvaluatorOptions = Object.freeze({
   maxImageSize: -1,
   disableFontFace: false,
   ignoreErrors: false,
-  isEvalSupported: true,
+  isEvalSupported: false,
   isOffscreenCanvasSupported: true,
   fontExtraProperties: false,
   useSystemFonts: true,
@@ -44789,7 +44789,8 @@ class PDFFunctionFactory {
     isEvalSupported = true
   }) {
     this.xref = xref;
-    this.isEvalSupported = isEvalSupported !== false;
+    // Office Viewer (Hardened): PostScript functions are never compiled with `new Function`.
+    this.isEvalSupported = false;
   }
   create(fn) {
     const cachedFunction = this.getCached(fn);

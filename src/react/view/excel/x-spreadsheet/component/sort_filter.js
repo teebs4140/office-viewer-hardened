@@ -22,13 +22,13 @@ function buildFilterBody(items) {
     const active = filterValues.includes(it) ? 'checked' : '';
     filterbEl.child(h('div', `${cssPrefix}-item state ${active}`)
       .on('click.stop', () => this.filterClick(index, it))
-      .children(it === '' ? t('filter.empty') : it, h('div', 'label').html(`(${cnt})`)));
+      .children(it === '' ? t('filter.empty') : it, h('div', 'label').text(`(${cnt})`)));
   });
 }
 
 function resetFilterHeader() {
   const { filterhEl, filterValues, values } = this;
-  filterhEl.html(`${filterValues.length} / ${values.length}`);
+  filterhEl.text(`${filterValues.length} / ${values.length}`);
   filterhEl.checked(filterValues.length === values.length);
 }
 

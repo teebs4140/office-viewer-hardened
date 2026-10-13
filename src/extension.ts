@@ -4,6 +4,7 @@ import { ReactApp } from './common/reactApp';
 
 export function activate(context: vscode.ExtensionContext) {
 	ReactApp.init(context);
+	// Kept so switching tabs does not re-parse the workbook/PDF and lose scroll, zoom and sheet position.
 	const viewOption = { webviewOptions: { retainContextWhenHidden: true } };
 	const viewerInstance = new OfficeViewerProvider(context);
 	context.subscriptions.push(viewerInstance.bindCustomEditor(viewOption));

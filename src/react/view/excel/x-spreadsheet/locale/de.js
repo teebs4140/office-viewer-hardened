@@ -83,6 +83,7 @@ export default {
   viewer: {
     saveSuccess: 'Gespeichert',
     protectedCell: 'Geschützte Zellen unterstützen diese Funktion nicht',
+    linkBlocked: 'Link nicht geöffnet: Nur http-, https- und mailto-Links können geöffnet werden',
     readonlyBanner: 'Schreibgeschützt — durchsuchen und suchen; zum Speichern „Speichern unter“ verwenden',
     formatCannotPreserveTitle: 'Formatierung kann nicht beibehalten werden',
     formatCannotPreserveContent: '{} kann Stile, Zusammenführungen, Formeln usw. nicht beibehalten. Als xlsx speichern?',

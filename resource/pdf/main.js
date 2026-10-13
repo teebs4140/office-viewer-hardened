@@ -4,8 +4,8 @@
   const SIDEBAR_WIDTH_VAR = '--sidebar-width';
   const SIDEBAR_MIN_WIDTH = 200;
   const SIDEBAR_DEFAULT_WIDTH = 270;
-  const SIDEBAR_STORAGE_KEY = 'vscode-office.pdf.sidebarWidth';
-  const SIDEBAR_OPEN_STORAGE_KEY = 'vscode-office.pdf.sidebarOpen';
+  const SIDEBAR_STORAGE_KEY = 'officeViewerHardened.pdf.sidebarWidth';
+  const SIDEBAR_OPEN_STORAGE_KEY = 'officeViewerHardened.pdf.sidebarOpen';
   let sidebarOpenStateReady = false;
 
   function loadSidebarWidth() {
@@ -112,7 +112,7 @@
   const SUN_STROKE_ICON = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/></svg>';
 
   function setupThemeAdapt() {
-    const STORAGE_KEY = 'office-pdf-adaptive-theme';
+    const STORAGE_KEY = 'officeViewerHardened.pdf.adaptiveTheme';
     const apply = (on) => {
       document.body.classList.toggle('office-adaptive-theme', on);
       const btn = document.getElementById('themeAdaptToggle');
@@ -142,7 +142,7 @@
   }
 
   function setupDarkMode() {
-    const STORAGE_KEY = 'office-pdf-dark-mode';
+    const STORAGE_KEY = 'officeViewerHardened.pdf.darkMode';
     const apply = (on) => {
       document.body.classList.toggle('office-dark', on);
       const btn = document.getElementById('darkModeToggle');
@@ -419,6 +419,78 @@
     });
   }
 
+  // Links in the document (annotations and outline) are built by viewer.js; external ones
+  // only keep an href when it is http:, https: or mailto:. VS Code's webview host would open
+  // any clicked <a href> by itself, so every link click stops here: in-document links are
+  // handled by pdf.js's own onclick, and an external link is sent to the extension host as
+  // { type: 'openExternal', content: '<url>' }, which checks the scheme again.
+  const EXTERNAL_LINK_PROTOCOLS = ['http:', 'https:', 'mailto:'];
+
+  function findLink(event) {
+    for (const node of event.composedPath()) {
+      if (node && node.tagName && node.tagName.toLowerCase() === 'a') {
+        return node;
+      }
+    }
+    return null;
+  }
+
+  function getExternalUrl(link) {
+    const raw = link.getAttribute('href');
+    if (!raw || raw.startsWith('#')) {
+      return null;
+    }
+    let url;
+    try {
+      url = new URL(raw);
+    } catch {
+      return null;
+    }
+    if (!EXTERNAL_LINK_PROTOCOLS.includes(url.protocol)) {
+      return null;
+    }
+    // Never hand the webview's own resources (extension files, the opened PDF) to the host.
+    let baseOrigin = null;
+    try {
+      baseOrigin = new URL(document.baseURI).origin;
+    } catch {
+      // ignore
+    }
+    if (url.origin === window.location.origin || url.origin === baseOrigin) {
+      return null;
+    }
+    return url.href;
+  }
+
+  function onLinkActivated(event) {
+    const link = findLink(event);
+    if (!link) {
+      return;
+    }
+    event.stopPropagation();
+    // The window-level click handler that closes the Tools menu no longer sees link clicks.
+    if (window.PDFViewerApplication?.secondaryToolbar?.isOpen) {
+      PDFViewerApplication.secondaryToolbar.close();
+    }
+    const raw = link.getAttribute('href');
+    if (!raw || raw.startsWith('#')) {
+      return;
+    }
+    event.preventDefault();
+    if (event.type !== 'click' || event.button !== 0) {
+      return;
+    }
+    const url = getExternalUrl(link);
+    if (url) {
+      vscodeEvent.emit('openExternal', url);
+    }
+  }
+
+  function setupLinkBridge() {
+    document.addEventListener('click', onLinkActivated);
+    document.addEventListener('auxclick', onLinkActivated);
+  }
+
   function toUint8Array(buffer) {
     if (!buffer) {
       return null;
@@ -451,16 +523,21 @@
       return;
     }
     const data = toUint8Array(payload.buffer);
-    if (data?.length) {
-      PDFViewerApplication.open(data);
-      return;
-    }
-    if (payload.path) {
-      PDFViewerApplication.open(payload.path);
-    }
+    // The 'open' reply can arrive before the viewer has finished initializing (it still loads its
+    // locale at window load); opening then fails in PDFViewerApplication.load (toolbar is null).
+    PDFViewerApplication.initializedPromise.then(() => {
+      if (data?.length) {
+        PDFViewerApplication.open(data);
+        return;
+      }
+      if (payload.path) {
+        PDFViewerApplication.open(payload.path);
+      }
+    });
   }
 
   window.addEventListener('load', function () {
+    setupLinkBridge();
     setupThemeAdapt();
     setupDarkMode();
     setupCustomScaleSelect();

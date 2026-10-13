@@ -1,16 +1,17 @@
 let configs = null;
 
+/**
+ * Reads the view options the host injects as JSON into
+ * <script type="application/json" id="office-configs"> (never executed under the CSP).
+ */
 export function getConfigs() {
     if (configs) return configs;
-    const elem = document.getElementById('office-configs')
-    const value = elem.getAttribute('data-config');
-    if (value == '{{configs}}') return null;
-    configs = JSON.parse(value);
+    const value = document.getElementById('office-configs')?.textContent?.trim();
+    if (!value || value == '{{configs}}') return null;
+    try {
+        configs = JSON.parse(value);
+    } catch {
+        return null;
+    }
     return configs;
 }
-
-// export function getConfig(key, defaultValue) {
-//     const config = configs?.config;
-//     if (!config) return false;
-//     return config[key] ?? defaultValue ?? false
-// }

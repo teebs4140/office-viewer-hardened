@@ -25,12 +25,12 @@ export function shouldShowToolbarTooltip(evt, btnEl) {
   return true;
 }
 
-export default function tooltip(html, target) {
+export default function tooltip(text, target) {
   hideTooltip();
   const {
     left, top, width, height,
   } = target.getBoundingClientRect();
-  const el = h('div', `${cssPrefix}-tooltip`).html(html).show();
+  const el = h('div', `${cssPrefix}-tooltip`).text(text).show();
   document.body.appendChild(el.el);
   const elBox = el.box();
   // console.log('elBox:', elBox);

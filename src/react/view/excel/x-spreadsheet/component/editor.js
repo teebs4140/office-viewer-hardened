@@ -70,7 +70,7 @@ function insertText({ target }, itxt) {
   target.setSelectionRange(selectionEnd + 1, selectionEnd + 1);
 
   this.inputText = ntxt;
-  this.textlineEl.html(ntxt);
+  this.textlineEl.text(ntxt);
   resetTextareaSize.call(this);
 }
 
@@ -125,7 +125,7 @@ function inputEventHandler(evt) {
           suggest.hide();
         }
       }
-      textlineEl.html(v);
+      textlineEl.text(v);
       resetTextareaSize.call(this);
       this.change('input', v);
     } else {
@@ -147,7 +147,7 @@ function inputEventHandler(evt) {
         suggest.hide();
       }
     }
-    textlineEl.html(v);
+    textlineEl.text(v);
     resetTextareaSize.call(this);
     this.change('input', v);
   }
@@ -167,7 +167,7 @@ function setText(text, position) {
   textEl.el.blur();
 
   textEl.val(text);
-  textlineEl.html(text);
+  textlineEl.text(text);
   setTextareaRange.call(this, position);
 }
 
@@ -201,7 +201,7 @@ function resetSuggestItems() {
 function updateEditorText(editor, text, position) {
   editor.inputText = text;
   editor.textEl.val(text);
-  editor.textlineEl.html(text);
+  editor.textlineEl.text(text);
   editor.textEl.el.focus();
   editor.textEl.el.setSelectionRange(position, position);
   resetTextareaSize.call(editor);

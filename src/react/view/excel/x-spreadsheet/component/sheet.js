@@ -605,9 +605,9 @@ function clearClipboard() {
   selector.hideClipboard();
 }
 
+// Copy stays available in read mode: it only writes the selection to the system clipboard.
 function copy(evt) {
   const { data, selector } = this;
-  if (data.settings.mode === 'read') return;
   data.copy();
   data.copyToSystemClipboard(evt);
   selector.showClipboard();
@@ -1093,18 +1093,6 @@ function beginFormulaReferenceInput(formulaName) {
 
 function toolbarChange(type, value) {
   const { data, toolbar, editor } = this;
-  if (type === 'save') {
-    if (data.settings.mode === 'read') {
-      this.trigger('save-as');
-      return;
-    }
-    this.trigger('save');
-    return;
-  }
-  if (type === 'save-as') {
-    this.trigger('save-as');
-    return;
-  }
   if (type === 'edit-in-vscode') {
     this.trigger('edit-in-vscode');
     return;
@@ -1532,7 +1520,7 @@ export default class Sheet {
     this.modalValidation = new ModalValidation();
     this.modalHyperlink = new ModalHyperlink();
     // contextMenu
-    this.contextMenu = new ContextMenu(() => this.getRect(), !showContextmenu);
+    this.contextMenu = new ContextMenu(() => this.getRect(), !showContextmenu, data.settings.mode === 'read');
     // selector
     this.selector = new Selector(data);
     this.sheetImages = new SheetImages();
@@ -1581,9 +1569,6 @@ export default class Sheet {
 
   trigger(eventName, ...args) {
     const { eventMap } = this;
-    if (eventName === 'change' && this.data.settings.mode !== 'read') {
-      this.toolbar.setSaveEnabled(true);
-    }
     eventMap.fire(eventName, args);
   }
 
@@ -1596,7 +1581,6 @@ export default class Sheet {
     horizontalScrollbarSet.call(this);
     this.toolbar.resetData(data);
     this.formulaBar.resetData(data);
-    this.toolbar.setSaveEnabled(false);
     this.print.resetData(data);
     this.selector.resetData(data);
     this.table.resetData(data);

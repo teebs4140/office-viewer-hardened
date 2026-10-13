@@ -137,7 +137,7 @@ export default class Suggest {
             const item = h('div', `${cssPrefix}-item`)
               .children(
                 h('span', '').child(title),
-                h('div', 'label').html(hint),
+                h('div', 'label').text(hint),
               )
               .on('click.stop', () => {
                 this.itemClick(it);
@@ -163,7 +163,7 @@ export default class Suggest {
           this.hide();
         });
       if (it.label) {
-        item.child(h('div', 'label').html(it.label));
+        item.child(h('div', 'label').text(it.label));
       }
       return item;
     });

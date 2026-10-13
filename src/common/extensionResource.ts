@@ -13,6 +13,10 @@ export async function readExtensionText(context: vscode.ExtensionContext, ...seg
     return new TextDecoder().decode(bytes);
 }
 
+/** Only the folders the webview pages load from: the React bundle and the pdf.js viewer (plus resource/lib). */
 export function getExtensionResourceRoots(context: vscode.ExtensionContext): vscode.Uri[] {
-    return [getExtensionUri(context)];
+    return [
+        extensionResource(context, 'out', 'webview'),
+        extensionResource(context, 'resource'),
+    ];
 }

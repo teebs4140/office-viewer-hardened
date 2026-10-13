@@ -22,8 +22,6 @@ import Redo from './redo';
 import Undo from './undo';
 import Textwrap from './textwrap';
 import More from './more';
-import Save from './save';
-import SaveAs from './saveas';
 import EditInVSCode from './edit_in_vscode';
 import Find from './find';
 import Item from './item';
@@ -123,8 +121,6 @@ export default class Toolbar {
       buildDivider(),
       [
         this.editInVSCodeEl = new EditInVSCode(),
-        this.saveEl = new Save(),
-        this.saveAsEl = new SaveAs(),
       ],
       buildDivider(),
       [
@@ -173,6 +169,15 @@ export default class Toolbar {
       ],
     ];
 
+    if (data.settings.mode === 'read') {
+      // Read-only viewer: keep only the tools that change the view, not the workbook.
+      // The editing items above are still built (reset() updates their state) but not shown.
+      this.items = [
+        ...(data.settings.showEditInVSCode ? [[this.editInVSCodeEl], buildDivider()] : []),
+        [this.findEl, this.autofilterEl, this.freezeEl],
+      ];
+    }
+
     const { extendToolbar = {} } = data.settings;
 
     if (extendToolbar.left && extendToolbar.left.length > 0) {
@@ -211,9 +216,6 @@ export default class Toolbar {
     this.fontSizeEl.change = (...args) => { this.change(...args); };
 
     this.el.child(this.btns);
-    if (data.settings.mode === 'read') {
-      this.saveEl.el.hide();
-    }
     if (!data.settings.showEditInVSCode) {
       this.editInVSCodeEl.el.hide();
     }
@@ -229,10 +231,6 @@ export default class Toolbar {
         moreResize.call(this);
       });
     }
-  }
-
-  setSaveEnabled(enabled) {
-    this.saveEl.setEnabled(enabled);
   }
 
   paintformatActive() {

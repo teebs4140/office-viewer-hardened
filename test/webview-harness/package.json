@@ -1,0 +1,14 @@
+{
+  "name": "office-viewer-hardened-webview-harness",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Headless Chromium harness that loads the Office Viewer (Hardened) webview pages with the production CSP and a stub VS Code API. Not part of the extension.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.61.1"
+  }
+}

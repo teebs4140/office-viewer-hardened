@@ -87,7 +87,7 @@ export default class Calendar {
 
   buildHeaderLeft() {
     const { value } = this;
-    this.headerLeftEl.html(`${t('calendar.months')[value.getMonth()]} ${value.getFullYear()}`);
+    this.headerLeftEl.text(`${t('calendar.months')[value.getMonth()]} ${value.getFullYear()}`);
   }
 
   buildBody() {

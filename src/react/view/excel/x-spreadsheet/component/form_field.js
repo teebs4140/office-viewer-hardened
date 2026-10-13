@@ -13,7 +13,7 @@ export default class FormField {
     this.label = '';
     this.rule = rule;
     if (label) {
-      this.label = h('label', 'label').css('width', `${labelWidth}px`).html(label);
+      this.label = h('label', 'label').css('width', `${labelWidth}px`).text(label);
     }
     this.tip = h('div', 'tip').child('tip').hide();
     this.input = input;
@@ -50,7 +50,7 @@ export default class FormField {
     const v = input.val();
     if (rule.required) {
       if (/^\s*$/.test(v)) {
-        tip.html(t('validation.required'));
+        tip.text(t('validation.required'));
         el.addClass('error');
         return false;
       }
@@ -58,7 +58,7 @@ export default class FormField {
     if (rule.type || rule.pattern) {
       const pattern = rule.pattern || patterns[rule.type];
       if (!pattern.test(v)) {
-        tip.html(t('validation.notMatch'));
+        tip.text(t('validation.notMatch'));
         el.addClass('error');
         return false;
       }
