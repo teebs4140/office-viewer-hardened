@@ -473,11 +473,21 @@
       PDFViewerApplication.secondaryToolbar.close();
     }
     const raw = link.getAttribute('href');
-    if (!raw || raw.startsWith('#')) {
+    if (!raw) {
       return;
     }
+    // Never let the browser follow a link: a fragment resolves against <base>, which would
+    // navigate away from the viewer.
     event.preventDefault();
     if (event.type !== 'click' || event.button !== 0) {
+      return;
+    }
+    if (raw.startsWith('#')) {
+      // pdf.js' own onclick has already handled the link. Copies made for annotations with
+      // several /QuadPoints are cloned without that handler, so navigate for them here.
+      if (typeof link.onclick !== 'function' && raw.length > 1) {
+        window.PDFViewerApplication?.pdfLinkService?.setHash(raw.substring(1));
+      }
       return;
     }
     const url = getExternalUrl(link);

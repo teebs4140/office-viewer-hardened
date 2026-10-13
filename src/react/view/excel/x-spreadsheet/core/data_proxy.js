@@ -641,6 +641,8 @@ export default class DataProxy {
     } = this.selector.range;
 
     for (let ri = sri; ri <= eri; ri += 1) {
+      // Rows hidden by an autofilter are not part of what the user sees, so don't copy them.
+      if (this.exceptRowSet.has(ri)) continue;
       const nri = getDataRowIndex(this, ri);
       const row = [];
       for (let ci = sci; ci <= eci; ci += 1) {

@@ -66,11 +66,23 @@ The full diff from upstream is `git diff upstream-4.2.0..main`.
   the document arrived before the viewer finished initialising. This bug was also in upstream.
 - PDF link annotations threw because the viewer's link service lacked methods pdf.js 3.1.81 calls.
   Links now work.
+- PDF links that pdf.js clones for annotations with several highlight areas had no click
+  handler, so clicking them made the browser follow the fragment against `<base>` and leave the
+  viewer. Every link click is now cancelled, and cloned internal links are navigated explicitly.
+  Middle-clicking an internal link no longer opens a new window.
+- Copy from a filtered spreadsheet included the rows the filter hid, in both the plain-text and
+  HTML clipboard formats. It now copies only visible rows, and a merged block is copied with its
+  value even when its first row is hidden.
+- `git:` and other virtual versions of `.pdf`, `.xlsx`, `.xlsm`, `.docx` and `.dotx` files are
+  checked for the right file signature. VS Code's git provider can return text-converted content
+  (`git show --textconv`), and the viewer now says so instead of failing to parse it.
 
 ### Build
 
 - `package-lock.json` is committed, and builds use `npm ci --ignore-scripts`. Upstream ignored its
   lockfile.
 - CI builds, type-checks and packages with lifecycle scripts disabled.
+- `THIRD_PARTY_NOTICES.md` ships the licence text of every bundled component, including the
+  vendored pdf.js (Apache-2.0) and x-spreadsheet (MIT).
 - Added a headless-Chromium webview test harness with benign and hostile fixtures in
   `test/webview-harness/` and `test/fixtures/`. It is not shipped in the VSIX.

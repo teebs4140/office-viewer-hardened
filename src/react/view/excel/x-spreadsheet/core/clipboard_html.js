@@ -195,18 +195,34 @@ export function formatHtmlClipboard(data, range) {
   const defaultStyle = data.defaultStyle();
   const rows = [];
 
+  const hidden = data.exceptRowSet || new Set();
+  const visibleRowsBetween = (from, to) => {
+    let n = 0;
+    for (let r = from; r <= to; r += 1) if (!hidden.has(r)) n += 1;
+    return n;
+  };
+
   for (let ri = sri; ri <= eri; ri += 1) {
+    // Rows hidden by an autofilter are not part of what the user sees, so don't copy them.
+    if (hidden.has(ri)) continue;
     let rowHtml = '<tr>';
     for (let ci = sci; ci <= eci; ci += 1) {
       const merge = data.merges.getFirstIncludes(ri, ci);
-      if (merge && (merge.sri !== ri || merge.sci !== ci)) {
+      // A merge is emitted from its first visible row; later rows of it are covered by rowspan.
+      const mergeStart = merge ? Math.max(merge.sri, sri) : ri;
+      const firstVisible = merge && hidden.has(mergeStart)
+        ? (() => { let r = mergeStart; while (r < ri && hidden.has(r)) r += 1; return r; })()
+        : mergeStart;
+      if (merge && (firstVisible !== ri || Math.max(merge.sci, sci) !== ci)) {
         continue;
       }
-      const style = data.getCellStyleOrDefault(ri, ci);
-      const text = data.getCellTextOrDefault(ri, ci);
+      // A merged block's value and style live in its top-left cell, which may be hidden or
+      // outside the selection.
+      const style = merge ? data.getCellStyleOrDefault(merge.sri, merge.sci) : data.getCellStyleOrDefault(ri, ci);
+      const text = merge ? data.getCellTextOrDefault(merge.sri, merge.sci) : data.getCellTextOrDefault(ri, ci);
       let extraAttrs = '';
       if (merge) {
-        const rowspan = Math.min(merge.eri, eri) - ri + 1;
+        const rowspan = visibleRowsBetween(ri, Math.min(merge.eri, eri));
         const colspan = Math.min(merge.eci, eci) - ci + 1;
         const attrs = [];
         if (rowspan > 1) attrs.push(`rowspan="${rowspan}"`);

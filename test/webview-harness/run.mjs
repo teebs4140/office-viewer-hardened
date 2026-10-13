@@ -220,8 +220,25 @@ function initScript(cfg) {
     if (window.top !== window) return;
     const rec = {
         messages: [], csp: [], titleWrites: [], injected: [], canvasText: [], canvasTextSet: new Set(),
+        clipboardWrites: [], linkEvents: [], colHeaderX: {},
     };
     Object.defineProperty(window, '__ovh', { value: rec });
+
+    // Async Clipboard API stub: records what the page writes (the spreadsheet's context-menu Copy
+    // uses navigator.clipboard.write) and refuses reads, as a webview without permission would.
+    const clipboardStub = Object.freeze({
+        async write(items) {
+            const entry = {};
+            for (const item of items) {
+                for (const type of item.types) entry[type] = await (await item.getType(type)).text();
+            }
+            rec.clipboardWrites.push(entry);
+        },
+        async writeText(text) { rec.clipboardWrites.push({ 'text/plain': String(text) }); },
+        read() { return Promise.reject(new DOMException('clipboard read blocked by harness', 'NotAllowedError')); },
+        readText() { return Promise.reject(new DOMException('clipboard read blocked by harness', 'NotAllowedError')); },
+    });
+    Object.defineProperty(Navigator.prototype, 'clipboard', { configurable: true, get() { return clipboardStub; } });
 
     document.addEventListener('securitypolicyviolation', (e) => {
         rec.csp.push({
@@ -245,6 +262,16 @@ function initScript(cfg) {
         if (!rec.canvasTextSet.has(s) && rec.canvasTextSet.size < 5000) {
             rec.canvasTextSet.add(s);
             rec.canvasText.push(s);
+        }
+        // Column header letters are drawn centred in their column, in the 30px header row: keep
+        // their on-screen x so tests can find columns whose width is not the default.
+        const [x, y] = rest;
+        if (/^[A-Z]{1,2}$/.test(s) && this.canvas && typeof x === 'number' && typeof y === 'number') {
+            const m = this.getTransform();
+            const r = this.canvas.getBoundingClientRect();
+            const k = r.width / this.canvas.width;
+            const cy = (m.b * x + m.d * y + m.f) * k;
+            if (cy >= 0 && cy < 30) rec.colHeaderX[s] = r.left + (m.a * x + m.c * y + m.e) * k;
         }
         return fillText.call(this, text, ...rest);
     };
@@ -427,6 +454,148 @@ async function testExcelHostile(page, t, fx) {
     await excelFind(page, t, fx.find);
 }
 
+// --- Copy with an autofilter (filter.csv) ---------------------------------------------------
+
+// Screen position of a cell. Columns are located from the header letters drawn on the canvas
+// (the CSV reader sizes columns to their content, so they are not 100px wide). Rows are 30px
+// (Excel.tsx); rows hidden by a filter have zero height, so `ri` is the row's position among the
+// rows on screen (0 = first sheet row), not its sheet row.
+async function cellGeometry(page, ri, ci) {
+    const box = await page.locator('.x-spreadsheet-overlayer').boundingBox();
+    const centers = await page.evaluate(() => window.__ovh.colHeaderX);
+    let left = box.x + 60; // index column
+    let center = null;
+    for (let i = 0; i <= ci; i += 1) {
+        center = centers[String.fromCharCode(65 + i)];
+        if (typeof center !== 'number') throw new Error(`column ${String.fromCharCode(65 + i)} header not drawn`);
+        if (i < ci) left = 2 * center - left;
+    }
+    const top = box.y + 30 + ri * 30;
+    return { x: center, y: top + 15, right: 2 * center - left, bottom: top + 30 };
+}
+
+// antd's fullscreen Spin fades out after loading and catches clicks until it is gone.
+async function excelInteractive(page) {
+    await waitFor(page, () => {
+        const o = document.querySelector('.x-spreadsheet-overlayer');
+        const r = o?.getBoundingClientRect();
+        return !!r && o.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+    }, null, { what: 'spreadsheet to take pointer input' });
+}
+
+// Click one cell, Shift+click another (positions as in cellGeometry).
+async function selectCells(page, [r1, c1], [r2, c2]) {
+    const a = await cellGeometry(page, r1, c1);
+    await page.mouse.click(a.x, a.y);
+    const b = await cellGeometry(page, r2, c2);
+    await page.keyboard.down('Shift');
+    await page.mouse.click(b.x, b.y);
+    await page.keyboard.up('Shift');
+    await sleep(100);
+}
+
+// Fires the 'copy' event the browser sends for Ctrl+C and returns what the page's handler
+// (x-spreadsheet sheet.js -> DataProxy.copyToSystemClipboard) put on the event's DataTransfer.
+async function copyViaEvent(page) {
+    return page.evaluate(() => {
+        const clipboardData = new DataTransfer();
+        const ev = new ClipboardEvent('copy', { clipboardData, bubbles: true, cancelable: true });
+        document.dispatchEvent(ev);
+        return { handled: ev.defaultPrevented, text: clipboardData.getData('text/plain'), html: clipboardData.getData('text/html') };
+    });
+}
+
+// Context menu "Copy" (no clipboard event: the page writes through navigator.clipboard.write).
+async function copyViaContextMenu(page, [ri, ci]) {
+    const before = await page.evaluate(() => window.__ovh.clipboardWrites.length);
+    const c = await cellGeometry(page, ri, ci);
+    await page.mouse.click(c.x, c.y, { button: 'right' });
+    await page.locator('.x-spreadsheet-contextmenu .x-spreadsheet-item').filter({ hasText: /^Copy/ }).filter({ visible: true }).first().click();
+    await waitFor(page, (n) => window.__ovh.clipboardWrites.length > n, before, { what: 'navigator.clipboard write', timeout: 5000 });
+    const w = await page.evaluate((n) => window.__ovh.clipboardWrites[n], before);
+    // "handled": the page wrote both formats.
+    return { handled: typeof w['text/plain'] === 'string' && typeof w['text/html'] === 'string', text: w['text/plain'] ?? '', html: w['text/html'] ?? '' };
+}
+
+function htmlTableRows(html) {
+    return [...html.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map((tr) => [...tr[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/g)].map((td) => td[1]));
+}
+
+// Asserts that both clipboard formats hold exactly `expected` (rows of cell text, in order) and
+// none of the `hidden` rows.
+function checkCopied(t, label, got, expected, hidden) {
+    t.check(`${label}: copy handler ran`, got.handled, JSON.stringify(got).slice(0, 200));
+    const wantText = expected.map((r) => r.join('\t')).join('\n');
+    t.check(`${label}: text/plain is exactly the visible rows, in display order`, got.text === wantText, JSON.stringify(got.text));
+    const leakedText = hidden.filter((r) => got.text.includes(r[0]));
+    t.check(`${label}: text/plain has no hidden row`, leakedText.length === 0, JSON.stringify(leakedText.map((r) => r[0])));
+    const rows = htmlTableRows(got.html);
+    t.check(`${label}: text/html table is exactly the visible rows, in display order`, JSON.stringify(rows) === JSON.stringify(expected), JSON.stringify(rows));
+    const leakedHtml = hidden.filter((r) => got.html.includes(r[0]));
+    t.check(`${label}: text/html has no hidden row`, leakedHtml.length === 0, JSON.stringify(leakedHtml.map((r) => r[0])));
+}
+
+async function openFilterMenu(page, ci) {
+    // The filter arrow is the bottom-right 20px of the header cell (sheet.js overlayerMousedown).
+    const c = await cellGeometry(page, 0, ci);
+    await page.mouse.click(c.right - 8, c.bottom - 8);
+    const menu = page.locator('.x-spreadsheet-sort-filter');
+    await menu.waitFor({ state: 'visible', timeout: 5000 });
+    return menu;
+}
+
+async function testExcelFilterCopy(page, t, fx) {
+    await excelReady(page, t);
+    await canvasHas(page, t, fx.expect);
+    await excelInteractive(page);
+    const [header, ...data] = readFileSync(join(FIXTURES, fx.file), 'utf8').trim().split(/\r?\n/).map((l) => l.split(','));
+    const ARM = header.indexOf('ARM');
+    const AGE = header.indexOf('AGE');
+    const lastCol = header.length - 1;
+    const placebo = data.filter((r) => r[ARM] === 'Placebo');
+    const drugA = data.filter((r) => r[ARM] !== 'Placebo');
+    // The fixture must have hidden rows between the first and last visible rows.
+    const firstP = data.indexOf(placebo[0]);
+    const lastP = data.indexOf(placebo.at(-1));
+    t.check('fixture: Drug A rows lie between the first and last Placebo rows',
+        drugA.some((r) => data.indexOf(r) > firstP && data.indexOf(r) < lastP));
+
+    // 1. No filter: copying data rows 1..n gives every row (shows the range spans the rows hidden later).
+    await selectCells(page, [1, 0], [data.length, lastCol]);
+    checkCopied(t, 'no filter, Ctrl+C', await copyViaEvent(page), data, []);
+
+    // 2. Turn the autofilter on for the table (header + data), through the toolbar button.
+    await selectCells(page, [0, 0], [data.length, lastCol]);
+    const filterBtn = page.locator('.x-spreadsheet-toolbar-btn').filter({ has: page.locator('.codicon-filter') }).first();
+    await filterBtn.click();
+    await sleep(200);
+    t.check('toolbar Filter button turns the autofilter on', await filterBtn.evaluate((el) => el.classList.contains('active')));
+
+    // 3. ARM filter: untick "Drug A" in the header dropdown, OK.
+    let menu = await openFilterMenu(page, ARM);
+    const items = await menu.locator('.x-spreadsheet-body .x-spreadsheet-item').allTextContents();
+    t.info('ARM filter items', JSON.stringify(items));
+    await menu.locator('.x-spreadsheet-body .x-spreadsheet-item').filter({ hasText: /^Drug A/ }).click();
+    await menu.locator('.x-spreadsheet-buttons .x-spreadsheet-button.primary').click();
+    await sleep(300);
+
+    // Visible data rows are now on screen rows 1..placebo.length; select them all.
+    await selectCells(page, [1, 0], [placebo.length, lastCol]);
+    checkCopied(t, 'ARM=Placebo, Ctrl+C', await copyViaEvent(page), placebo, drugA);
+    checkCopied(t, 'ARM=Placebo, context menu Copy', await copyViaContextMenu(page, [1, 1]), placebo, drugA);
+
+    // 4. Sort the filtered rows by AGE, descending (AGE dropdown -> sort Z-A, OK). The ARM filter stays.
+    menu = await openFilterMenu(page, AGE);
+    await menu.locator(':scope > .x-spreadsheet-item').nth(1).click(); // sort descending
+    await menu.locator('.x-spreadsheet-buttons .x-spreadsheet-button.primary').click();
+    await sleep(300);
+    const sorted = [...placebo].sort((a, b) => Number(b[AGE]) - Number(a[AGE]));
+    await selectCells(page, [1, 0], [placebo.length, lastCol]);
+    checkCopied(t, 'ARM=Placebo + AGE desc, Ctrl+C', await copyViaEvent(page), sorted, drugA);
+    checkCopied(t, 'ARM=Placebo + AGE desc, context menu Copy', await copyViaContextMenu(page, [1, 1]), sorted, drugA);
+    await page.keyboard.press('Escape');
+}
+
 async function testWord(page, t, fx) {
     await waitFor(page, (s) => document.body.innerText.includes(s), fx.expect[0], { what: 'docx text' });
     for (const s of fx.expect) {
@@ -554,28 +723,81 @@ async function testPdf(page, t, fx) {
             return { href: a?.getAttribute('href') ?? null, onclick: !!a?.onclick, title: a?.title ?? '' };
         }));
         t.info('annotation links', JSON.stringify(annots));
+        // Record, after the viewer's own document-level handler has run, whether each link click
+        // had its default action (following the href) prevented. The viewer calls
+        // stopPropagation(), which does not stop a later listener on the same node.
+        await page.evaluate(() => {
+            const log = (e) => {
+                const a = e.target instanceof Element ? e.target.closest('a') : null;
+                if (a) {
+                    window.__ovh.linkEvents.push({
+                        type: e.type, button: e.button, href: a.getAttribute('href'), pdfjsOnclick: typeof a.onclick === 'function', prevented: e.defaultPrevented,
+                    });
+                }
+            };
+            document.addEventListener('click', log);
+            document.addEventListener('auxclick', log);
+        });
         const urlBefore = page.url();
+        const sameDocument = (u) => u.split('#')[0] === urlBefore.split('#')[0]; // pdf.js may update the hash
+        const viewerState = () => page.evaluate(() => ({
+            viewer: !!window.PDFViewerApplication?.pdfDocument && !!document.getElementById('viewerContainer'),
+            page: window.PDFViewerApplication?.page,
+        })).catch((e) => ({ viewer: false, page: null, error: e.message.split('\n')[0] }));
         for (const link of fx.links) {
             const before = await page.evaluate(() => window.__ovh.messages.length);
             const sections = page.locator('.page[data-page-number="1"] .annotationLayer section');
             const sec = sections.nth(link.index);
             await sec.scrollIntoViewIfNeeded();
             const anchor = sec.locator('a');
+            if (link.anchor) {
+                // The fixture has to reproduce the case under test: pdf.js binds onclick on the first
+                // area's <a> only; the other /QuadPoints areas get a clone without it.
+                const a = annots[link.index] ?? {};
+                t.check(`${link.name}: <a href="#..."> ${link.anchor === 'clone' ? 'without' : 'with'} pdf.js onclick`,
+                    (a.href ?? '').startsWith('#') && a.href.length > 1 && a.onclick === (link.anchor === 'bound'), JSON.stringify(a));
+            }
+            const eventsBefore = await page.evaluate(() => window.__ovh.linkEvents.length);
+            const pageBefore = (await viewerState()).page;
             if (await anchor.count()) await anchor.click({ force: true });
             else await sec.click({ force: true });
             await sleep(500);
-            const sent = await page.evaluate((n) => window.__ovh.messages.slice(n), before);
-            const ext = sent.filter((m) => m?.type === 'openExternal').map((m) => m.content);
+            const state = await viewerState();
+            const sent = await page.evaluate((n) => window.__ovh.messages.slice(n), before).catch(() => null);
+            const ext = (sent ?? []).filter((m) => m?.type === 'openExternal').map((m) => m.content);
             if (link.expectExternal) {
                 t.check(`${link.name} -> one openExternal ${link.expectExternal}`, ext.length === 1 && ext[0] === link.expectExternal, JSON.stringify(ext));
             } else {
                 t.check(`${link.name} -> no openExternal`, ext.length === 0, JSON.stringify(ext));
             }
             if (link.expectPage) {
-                const pageNo = await page.evaluate(() => PDFViewerApplication.page);
-                t.check(`${link.name} -> goes to page ${link.expectPage}`, pageNo === link.expectPage, pageNo);
-                await page.evaluate(() => { PDFViewerApplication.page = 1; });
+                const clicks = (await page.evaluate((n) => window.__ovh.linkEvents.slice(n), eventsBefore).catch(() => [])).filter((e) => e.type === 'click');
+                t.check(`${link.name} -> browser default (follow href) prevented`, clicks.length === 1 && clicks[0].prevented, JSON.stringify(clicks));
+                if (link.anchor) {
+                    t.check(`${link.name} -> the click hit the ${link.anchor === 'clone' ? 'cloned' : 'pdf.js-bound'} <a>`,
+                        clicks.length === 1 && clicks[0].pdfjsOnclick === (link.anchor === 'bound'), JSON.stringify(clicks));
+                }
+                t.check(`${link.name} -> page did not navigate, viewer still loaded`, sameDocument(page.url()) && state.viewer, `${page.url()} ${JSON.stringify(state)}`);
+                t.check(`${link.name} -> posts no message`, Array.isArray(sent) && sent.length === 0, JSON.stringify(sent));
+                t.check(`${link.name} -> goes from page 1 to page ${link.expectPage}`, pageBefore === 1 && state.page === link.expectPage, `${pageBefore} -> ${state.page}`);
+                await page.evaluate(() => { PDFViewerApplication.page = 1; }).catch(() => { });
                 await sleep(300);
+            }
+            if (link.middleClick) {
+                // Middle-click on an internal link must neither open a new window nor navigate.
+                const msgsBefore = await page.evaluate(() => window.__ovh.messages.length).catch(() => 0);
+                const evBefore = await page.evaluate(() => window.__ovh.linkEvents.length).catch(() => 0);
+                const pagesBefore = page.context().pages().length;
+                await anchor.click({ button: 'middle', force: true }).catch(() => { });
+                await sleep(500);
+                const after = await viewerState();
+                const aux = (await page.evaluate((n) => window.__ovh.linkEvents.slice(n), evBefore).catch(() => [])).filter((e) => e.type === 'auxclick');
+                const msgs = await page.evaluate((n) => window.__ovh.messages.slice(n), msgsBefore).catch(() => null);
+                const newPages = page.context().pages().length - pagesBefore;
+                t.check(`${link.name}, middle-click -> default prevented`, aux.length === 1 && aux[0].prevented, JSON.stringify(aux));
+                t.check(`${link.name}, middle-click -> no new window, no navigation, stays on page 1`,
+                    newPages === 0 && sameDocument(page.url()) && after.viewer && after.page === 1, `${newPages} new pages; ${page.url()} ${JSON.stringify(after)}`);
+                t.check(`${link.name}, middle-click -> posts no message`, Array.isArray(msgs) && msgs.length === 0, JSON.stringify(msgs));
             }
         }
         t.check('page never navigated', page.url() === urlBefore, page.url());
@@ -616,6 +838,7 @@ const FIXTURE_CASES = [
         expect: ['Table 14.1 Demographics', 'Benign test document.', 'example.org'],
         links: [{ text: 'example.org', expectExternal: 'https://example.org/' }, { text: 'click', expectExternal: null }],
     },
+    { file: 'filter.csv', route: 'excel', kind: 'benign', test: testExcelFilterCopy, expect: ['USUBJID', 'ARM', 'Placebo', 'Drug A', '01-005'] },
     { file: 'benign.pdf', route: 'pdf', kind: 'benign', test: testPdf, pages: 2, expect: [], find: 'a' },
     {
         file: 'links.pdf', route: 'pdf', kind: 'hostile', test: testPdf, pages: 2, expect: ['Link test page one'], find: 'link',
@@ -623,7 +846,12 @@ const FIXTURE_CASES = [
             { index: 0, name: 'https link', expectExternal: 'https://example.org/' },
             { index: 1, name: 'javascript: URI link', expectExternal: null },
             { index: 2, name: 'JavaScript action link', expectExternal: null },
-            { index: 3, name: 'GoTo link', expectExternal: null, expectPage: 2 },
+            { index: 3, name: 'GoTo link', expectExternal: null, expectPage: 2, middleClick: true },
+            // One link annotation, two /QuadPoints areas: section 4 holds pdf.js' <a>, section 5 a clone.
+            { index: 4, name: 'GoTo quad link, area 1', anchor: 'bound', expectExternal: null, expectPage: 2 },
+            { index: 5, name: 'GoTo quad link, area 2 (cloned <a>)', anchor: 'clone', expectExternal: null, expectPage: 2, middleClick: true },
+            { index: 6, name: 'named-dest quad link, area 1', anchor: 'bound', expectExternal: null, expectPage: 2 },
+            { index: 7, name: 'named-dest quad link, area 2 (cloned <a>)', anchor: 'clone', expectExternal: null, expectPage: 2, middleClick: true },
         ],
     },
 ];

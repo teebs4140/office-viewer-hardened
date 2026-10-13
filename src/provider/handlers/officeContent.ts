@@ -1,5 +1,5 @@
 import { basename, extname } from 'path';
-import { Uri, workspace, type Webview } from 'vscode';
+import { Uri, window, workspace, type Webview } from 'vscode';
 import { Handler } from '@/common/handler';
 
 /** The fork is a read-only viewer, so every document is opened read-only in the webview. */
@@ -23,7 +23,32 @@ export function buildDocumentCacheId(uri: Uri): string {
  * the host never starts a child process to read them.
  */
 export async function readUriBytes(uri: Uri): Promise<Uint8Array> {
-    return workspace.fs.readFile(uri);
+    const data = await workspace.fs.readFile(uri);
+    checkBinarySignature(uri, data);
+    return data;
+}
+
+const ZIP_SIGNATURE = [0x50, 0x4b, 0x03, 0x04]; // "PK\x03\x04": xlsx, xlsm, docx, dotx
+const PDF_SIGNATURE = [0x25, 0x50, 0x44, 0x46, 0x2d]; // "%PDF-"
+
+function startsWith(data: Uint8Array, signature: number[]): boolean {
+    return data.length >= signature.length && signature.every((byte, i) => data[i] === byte);
+}
+
+/**
+ * VS Code's git file system provider reads history with `git show --textconv`, so a repository
+ * with a text-conversion driver for these formats hands back converted text instead of the file.
+ * Report that plainly rather than letting the viewer fail on unparseable bytes.
+ */
+function checkBinarySignature(uri: Uri, data: Uint8Array): void {
+    const ext = extname(uri.path).toLowerCase();
+    const signature = ext === '.pdf' ? PDF_SIGNATURE
+        : ['.xlsx', '.xlsm', '.docx', '.dotx'].includes(ext) ? ZIP_SIGNATURE
+            : undefined;
+    if (signature && !startsWith(data, signature)) {
+        throw new Error(`This ${uri.scheme}: version of ${basename(uri.path)} did not arrive as a ${ext} file `
+            + '(a git text-conversion driver may have converted it). Open the file from disk instead.');
+    }
 }
 
 export function bytesToPayloadBuffer(data: Uint8Array): number[] {
@@ -51,6 +76,8 @@ export async function emitVirtualOfficeOpen(handler: Handler, uri: Uri): Promise
         payload.buffer = bytesToPayloadBuffer(data);
         handler.emit('open', payload);
     } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to read file';
+        void window.showErrorMessage(`Office Viewer (Hardened): ${message}`);
         handler.emit('open', {
             ext,
             path: getPayloadPath(uri),
@@ -58,7 +85,7 @@ export async function emitVirtualOfficeOpen(handler: Handler, uri: Uri): Promise
             scheme: uri.scheme,
             documentCacheId: buildDocumentCacheId(uri),
             readOnly: READ_ONLY,
-            error: error instanceof Error ? error.message : 'Failed to read file',
+            error: message,
             nonce: now,
         });
     }

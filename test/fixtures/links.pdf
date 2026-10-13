@@ -1,22 +1,24 @@
 %PDF-1.4
 %‚„œ”
 1 0 obj
-<< /Type /Catalog /Pages 2 0 R /OpenAction << /S /JavaScript /JS (app.alert\('XSS-PDF-OPEN'\); this.print\(\);) >> >>
+<< /Type /Catalog /Pages 2 0 R /Dests << /chapter2 [6 0 R /Fit] >> /OpenAction << /S /JavaScript /JS (app.alert\('XSS-PDF-OPEN'\); this.print\(\);) >> >>
 endobj
 2 0 obj
-<< /Type /Pages /Kids [11 0 R 6 0 R] /Count 2 >>
+<< /Type /Pages /Kids [13 0 R 6 0 R] /Count 2 >>
 endobj
 3 0 obj
 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
 endobj
 4 0 obj
-<< /Length 257 >>
+<< /Length 409 >>
 stream
 BT /F1 18 Tf 72 740 Td (Link test page one) Tj ET
 BT /F1 12 Tf 72 705 Td (https link to example.org) Tj ET
 BT /F1 12 Tf 72 665 Td (javascript URI link) Tj ET
 BT /F1 12 Tf 72 625 Td (JavaScript action link) Tj ET
 BT /F1 12 Tf 72 585 Td (Go to page two) Tj ET
+BT /F1 12 Tf 72 545 Td (Quad link part one) Tj 150 0 Td (part two) Tj ET
+BT /F1 12 Tf 72 505 Td (Named quad link part one) Tj 150 0 Td (part two) Tj ET
 endstream
 endobj
 5 0 obj
@@ -41,24 +43,32 @@ endobj
 << /Type /Annot /Subtype /Link /Rect [70 580 300 600] /Border [0 0 0] /Dest [6 0 R /Fit] >>
 endobj
 11 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R /Annots [7 0 R 8 0 R 9 0 R 10 0 R] >>
+<< /Type /Annot /Subtype /Link /Rect [70 540 300 560] /QuadPoints [70 560 150 560 70 540 150 540 220 560 300 560 220 540 300 540] /Border [0 0 0] /Dest [6 0 R /Fit] >>
+endobj
+12 0 obj
+<< /Type /Annot /Subtype /Link /Rect [70 500 300 520] /QuadPoints [70 520 150 520 70 500 150 500 220 520 300 520 220 500 300 500] /Border [0 0 0] /Dest (chapter2) >>
+endobj
+13 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R /Annots [7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R] >>
 endobj
 xref
-0 12
+0 14
 0000000000 65535 f 
 0000000015 00000 n 
-0000000148 00000 n 
-0000000212 00000 n 
-0000000309 00000 n 
-0000000617 00000 n 
-0000000716 00000 n 
-0000000842 00000 n 
-0000000975 00000 n 
-0000001127 00000 n 
-0000001313 00000 n 
-0000001421 00000 n 
+0000000184 00000 n 
+0000000248 00000 n 
+0000000345 00000 n 
+0000000805 00000 n 
+0000000904 00000 n 
+0000001030 00000 n 
+0000001163 00000 n 
+0000001315 00000 n 
+0000001501 00000 n 
+0000001609 00000 n 
+0000001793 00000 n 
+0000001975 00000 n 
 trailer
-<< /Size 12 /Root 1 0 R >>
+<< /Size 14 /Root 1 0 R >>
 startxref
-1583
+2151
 %%EOF
