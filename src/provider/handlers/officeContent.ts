@@ -3,7 +3,6 @@ import { basename, dirname, extname, isAbsolute, relative } from 'path';
 import { extensions, Uri, workspace, type Webview } from 'vscode';
 import { Handler } from '@/common/handler';
 import { isUriReadOnly } from '@/common/fileReadOnly';
-import { isWebExtensionHost } from '@/common/extensionHost';
 
 export function isVirtualUri(uri: Uri): boolean {
     return uri.scheme !== 'file';
@@ -131,7 +130,7 @@ async function readGitUriBytes(uri: Uri): Promise<Uint8Array> {
 }
 
 export async function readUriBytes(uri: Uri): Promise<Uint8Array> {
-    if (uri.scheme === 'git' && !isWebExtensionHost() && process.platform === 'win32' && (
+    if (uri.scheme === 'git' && process.platform === 'win32' && (
         ['.pdf', '.docx'].includes(extname(uri.fsPath).toLowerCase())
     )) {
         try {

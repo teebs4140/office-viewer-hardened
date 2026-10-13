@@ -1,7 +1,6 @@
 import ExcelJS from '@cweijan/exceljs';
 import JSZip from 'jszip';
 import { handler } from "../../util/vscode";
-import * as XLSX from 'xlsx';
 import Spreadsheet from './x-spreadsheet/index';
 import type { RowData, SheetData } from './x-spreadsheet/index';
 import { CsvEncoding, encodeCsvText } from './csvEncoding';
@@ -160,47 +159,44 @@ async function exportWithExcelJs(sheets: SheetData[], options?: ExportOptions) {
     await emitSave(patched, options);
 }
 
-function applyColWidths(ws: XLSX.WorkSheet, xws: SheetData) {
-    const cols = xws.cols;
-    if (!cols?.len) return;
-    const colWidths = [];
-    for (let ci = 0; ci < cols.len; ci += 1) {
-        colWidths.push({ wpx: getColWidth(cols, ci) });
+function quoteCsvField(text: string, delimiter: string) {
+    // Same quoting rules SheetJS used for CSV export, plus quoting of bare carriage returns.
+    if (text === 'ID') return '"ID"';
+    if (text.includes(delimiter) || /["\r\n]/.test(text)) {
+        return `"${text.replace(/"/g, '""')}"`;
     }
-    ws['!cols'] = colWidths;
+    return text;
 }
 
-function dataToSheetJs(xws: SheetData) {
-    const aoa: string[][] = [];
+/** Serialise the cell text of one sheet as delimited text (rows joined with "\n"). */
+function sheetToDelimitedText(xws: SheetData, delimiter: string): string {
+    const grid: string[][] = [];
+    let maxCol = -1;
     const rowobj = xws.rows;
-    if (!rowobj?.len) {
-        const ws = XLSX.utils.aoa_to_sheet(aoa);
-        applyColWidths(ws, xws);
-        return ws;
-    }
-    for (let ri = 0; ri < rowobj.len; ri += 1) {
-        const row = rowobj[ri];
-        if (!isRowData(row)) continue;
-        aoa[ri] = [];
-        for (const ciKey of Object.keys(row.cells ?? {})) {
-            const ci = Number(ciKey);
-            if (Number.isNaN(ci)) continue;
-            aoa[ri][ci] = row.cells[ci].text;
+    if (rowobj?.len) {
+        for (let ri = 0; ri < rowobj.len; ri += 1) {
+            const row = rowobj[ri];
+            if (!isRowData(row)) continue;
+            for (const ciKey of Object.keys(row.cells ?? {})) {
+                const ci = Number(ciKey);
+                if (Number.isNaN(ci)) continue;
+                const text = row.cells[ci]?.text;
+                if (text == null) continue;
+                (grid[ri] ??= [])[ci] = String(text);
+                if (ci > maxCol) maxCol = ci;
+            }
         }
     }
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    applyColWidths(ws, xws);
-    return ws;
-}
-
-function exportWithSheetJs(sheets: SheetData[], bookType: XLSX.BookType) {
-    const workbook = XLSX.utils.book_new();
-    for (let i = 0; i < sheets.length; i += 1) {
-        const sheetData = sheets[i];
-        XLSX.utils.book_append_sheet(workbook, dataToSheetJs(sheetData), sheetData.name || `Sheet${i + 1}`);
+    if (maxCol < 0) return '';
+    const lines: string[] = [];
+    for (let ri = 0; ri < grid.length; ri += 1) {
+        const fields: string[] = [];
+        for (let ci = 0; ci <= maxCol; ci += 1) {
+            fields.push(quoteCsvField(grid[ri]?.[ci] ?? '', delimiter));
+        }
+        lines.push(fields.join(delimiter));
     }
-    const buffer = XLSX.write(workbook, { bookType, type: 'array' });
-    handler.emit('save', [...new Uint8Array(buffer)]);
+    return lines.join('\n');
 }
 
 export async function exportSaveAs(
@@ -215,19 +211,9 @@ export async function exportSaveAs(
         await exportWithExcelJs(sheets, { saveAs: true, saveAsExt: ext });
         return;
     }
-    if (ext === 'xls' || ext === 'ods') {
-        const wb = XLSX.utils.book_new();
-        sheets.forEach((s, i) => {
-            const ws = dataToSheetJs(s);
-            XLSX.utils.book_append_sheet(wb, ws, s.name || `Sheet${i + 1}`);
-        });
-        const buf = XLSX.write(wb, { bookType: ext as XLSX.BookType, type: 'array' });
-        handler.emit('saveAs', { content: [...new Uint8Array(buf)], ext });
-        return;
-    }
     if (ext === 'csv' || ext === 'tsv') {
         const fs = ext === 'tsv' ? '\t' : csvDelimiter;
-        const csvContent = XLSX.utils.sheet_to_csv(dataToSheetJs(sheets[0]), { FS: fs });
+        const csvContent = sheetToDelimitedText(sheets[0], fs);
         const bytes = encodeCsvText(csvContent, csvEncoding);
         handler.emit('saveAs', { content: [...bytes], ext });
     }
@@ -247,13 +233,9 @@ export async function export_xlsx(
         await exportWithExcelJs(sheets, options?.saveAs ? { saveAs: true } : undefined);
         return;
     }
-    if (ext === 'xls' || ext === 'ods') {
-        exportWithSheetJs(sheets, ext);
-        return;
-    }
     if (ext === 'csv' || ext === 'tsv') {
         const fs = ext === 'tsv' ? '\t' : csvDelimiter;
-        const csvContent = XLSX.utils.sheet_to_csv(dataToSheetJs(sheets[0]), { FS: fs });
+        const csvContent = sheetToDelimitedText(sheets[0], fs);
         const bytes = encodeCsvText(csvContent, csvEncoding);
         handler.emit('save', [...bytes]);
     }

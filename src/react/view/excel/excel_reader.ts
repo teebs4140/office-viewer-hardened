@@ -1,6 +1,5 @@
 import ExcelJS from '@cweijan/exceljs';
 import JSZip from 'jszip';
-import * as XLSX from 'xlsx';
 import { inferSchema, initParser } from 'udsv';
 import { decodeCsvBuffer } from './csvEncoding';
 import { DEFAULT_ROW_HEIGHT_PX, excelFreezeToExpr, excelRowHeightToPx, readAutofilterRef } from './excel_meta';
@@ -83,18 +82,28 @@ const readWorksheetMerges = (worksheet: ExcelJS.Worksheet): string[] => {
     return Array.from(new Set(merges));
 };
 
-const expandSizeForMerge = (merge: string, size: { maxRow: number; maxCols: number }) => {
-    const range = XLSX.utils.decode_range(merge);
-    size.maxRow = Math.max(size.maxRow, range.e.r + 1);
-    size.maxCols = Math.max(size.maxCols, range.e.c + 1);
+/** Zero-based row/column of an A1 reference such as "B10" or "$B$10". */
+const decodeA1Cell = (ref: string) => {
+    let row = 0;
+    let col = 0;
+    for (let i = 0; i < ref.length; i += 1) {
+        const code = ref.charCodeAt(i);
+        if (code >= 48 && code <= 57) row = 10 * row + (code - 48);
+        else if (code >= 65 && code <= 90) col = 26 * col + (code - 64);
+    }
+    return { r: row - 1, c: col - 1 };
 };
 
-const readSheetJsMerges = (worksheet: XLSX.WorkSheet) => (worksheet['!merges'] ?? [])
-    .map(merge => XLSX.utils.encode_range(merge));
+/** End cell of an A1 range such as "A1:C3" (a single cell is its own end). */
+const decodeA1RangeEnd = (range: string) => {
+    const parts = range.split(':');
+    return decodeA1Cell(parts[parts.length - 1]);
+};
 
-const expandSizeForSheetJsMerge = (merge: XLSX.Range, size: { maxRow: number; maxCols: number }) => {
-    size.maxRow = Math.max(size.maxRow, merge.e.r + 1);
-    size.maxCols = Math.max(size.maxCols, merge.e.c + 1);
+const expandSizeForMerge = (merge: string, size: { maxRow: number; maxCols: number }) => {
+    const end = decodeA1RangeEnd(merge);
+    size.maxRow = Math.max(size.maxRow, end.r + 1);
+    size.maxCols = Math.max(size.maxCols, end.c + 1);
 };
 
 const buildCsvCols = (rows: any[][], colCount: number) => {
@@ -314,103 +323,6 @@ const loadWithExcelJs = async (buffer: ArrayBuffer): Promise<ExcelData> => {
     return convertExcelJsWorkbook(workbook, sortStateXmlMap);
 };
 
-const sheetJsColWidthToPx = (col?: XLSX.ColInfo) => {
-    if (!col) return null;
-    if (col.wpx != null) return col.wpx;
-    if (col.wch != null) return col.wch * CHAR_WIDTH;
-    if (col.width != null) return col.width * CHAR_WIDTH;
-    return null;
-};
-
-const buildColsFromSheetJsWorksheet = (worksheet: XLSX.WorkSheet, colCount: number) => {
-    const cols: Record<number, { width: number }> = {};
-    const sheetCols = worksheet['!cols'];
-    for (let i = 0; i < colCount; i += 1) {
-        const width = sheetJsColWidthToPx(sheetCols?.[i]) ?? DEFAULT_COL_WIDTH;
-        cols[i] = { width: clampColWidth(width) };
-    }
-    return cols;
-};
-
-const formatSheetJsCell = (cell: XLSX.CellObject) => {
-    if (cell.w) return cell.w;
-    if (cell.v == null) return '';
-    if (cell.v instanceof Date) return cell.v.toISOString().slice(0, 10);
-    return String(cell.v);
-};
-
-const convertSheetJsWorksheet = (worksheet: XLSX.WorkSheet): Pick<SheetData, 'rows' | 'cols' | 'merges'> => {
-    const rows: RowMap = {};
-    let maxCols = 0;
-    let maxRow = 0;
-    const ref = worksheet['!ref'];
-    if (!ref) {
-        return { rows: { len: 0 }, cols: { len: 0 } };
-    }
-
-    const range = XLSX.utils.decode_range(ref);
-    for (let ri = range.s.r; ri <= range.e.r; ri += 1) {
-        const cells: Record<number, CellData> = {};
-        let hasContent = false;
-        for (let ci = range.s.c; ci <= range.e.c; ci += 1) {
-            const addr = XLSX.utils.encode_cell({ r: ri, c: ci });
-            const cell = worksheet[addr];
-            if (!cell) continue;
-            const text = formatSheetJsCell(cell);
-            if (!text) continue;
-            cells[ci] = { text };
-            hasContent = true;
-            if (ci + 1 > maxCols) maxCols = ci + 1;
-            if (ri + 1 > maxRow) maxRow = ri + 1;
-        }
-        if (hasContent) {
-            rows[ri] = { cells };
-        }
-    }
-
-    const sheetSize = { maxRow, maxCols };
-    (worksheet['!merges'] ?? []).forEach(merge => expandSizeForSheetJsMerge(merge, sheetSize));
-    maxRow = sheetSize.maxRow;
-    maxCols = sheetSize.maxCols;
-
-    const colCount = Math.max(maxCols, range.e.c - range.s.c + 1);
-    const merges = readSheetJsMerges(worksheet);
-    return {
-        rows: { len: maxRow, ...rows },
-        cols: { len: colCount, ...buildColsFromSheetJsWorksheet(worksheet, colCount) },
-        merges: merges.length > 0 ? merges : undefined,
-    };
-};
-
-const convertSheetJsWorkbook = (workbook: XLSX.WorkBook): ExcelData => {
-    const sheets: SheetData[] = [];
-    let maxLength = 0;
-    let maxCols = 26;
-
-    for (const sheetName of workbook.SheetNames) {
-        const converted = convertSheetJsWorksheet(workbook.Sheets[sheetName]);
-        const rowCount = converted.rows?.len ?? 0;
-        if (maxLength < rowCount) maxLength = rowCount;
-
-        const colLen = converted.cols?.len ?? 0;
-        if (colLen > maxCols) maxCols = colLen;
-
-        sheets.push({
-            name: sheetName,
-            rows: converted.rows,
-            cols: converted.cols,
-            ...(converted.merges ? { merges: converted.merges } : {}),
-        });
-    }
-
-    return { sheets, maxLength, maxCols };
-};
-
-const loadWithSheetJs = (buffer: ArrayBuffer): ExcelData => {
-    const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
-    return convertSheetJsWorkbook(workbook);
-};
-
 const loadCsv = (buffer: ArrayBuffer): ExcelData => {
     let maxCols = 26;
     const emptySheet = { maxCols, sheets: [{ name: 'Sheet1', rows: { len: 0 } }] };
@@ -471,15 +383,10 @@ const loadCsv = (buffer: ArrayBuffer): ExcelData => {
 };
 
 const isCsvExt = (ext: string) => /csv|tsv/.test(ext.toLowerCase());
-const isOdsExt = (ext: string) => ext.toLowerCase().includes('ods');
-const isXlsExt = (ext: string) => ext.toLowerCase().replace(/^\./, '') === 'xls';
 
 export async function loadSheets(buffer: ArrayBuffer, ext: string): Promise<ExcelData> {
     if (isCsvExt(ext)) {
         return loadCsv(buffer);
-    }
-    if (isXlsExt(ext) || isOdsExt(ext)) {
-        return loadWithSheetJs(buffer);
     }
     return loadWithExcelJs(buffer);
 }

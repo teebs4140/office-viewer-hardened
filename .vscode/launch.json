@@ -16,20 +16,6 @@
 				"${workspaceFolder}/out/**/*.js"
 			],
 			"preLaunchTask": "dev"
-		},
-		{
-			"name": "Extension (Web)",
-			"type": "extensionHost",
-			"request": "launch",
-			"debugWebWorkerHost": true,
-			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}",
-				"--extensionDevelopmentKind=web"
-			],
-			"outFiles": [
-				"${workspaceFolder}/out/**/*.js"
-			],
-			"preLaunchTask": "dev:web"
 		}
 	]
 }

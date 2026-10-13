@@ -2,33 +2,25 @@ import { ReactApp } from '@/common/reactApp';
 import { getFileSuffix } from '@/common/fileSuffix';
 import * as vscode from 'vscode';
 import { Handler } from '../common/handler';
-import { Util } from '../common/util';
-import { handleImage, isImage } from './handlers/imageHanlder';
-import { handleSvg } from './handlers/svgHandler';
-import { isVirtualUri, readUriText } from './handlers/officeContent';
-import { handleCommonEvent } from './compress/commonHandler';
-import { TelemetryService } from '@/service/telemetryService';
+import { VIEW_TYPE } from '../common/constants';
+import { handleCommonEvent } from './handlers/commonHandler';
 import { extensionResource, getExtensionResourceRoots, readExtensionText } from '@/common/extensionResource';
 
 /**
- * support view office files
+ * Custom editor for CSV/TSV, Excel (.xlsx/.xlsm), Word (.docx/.dotx) and PDF files.
  */
 export class OfficeViewerProvider implements vscode.CustomReadonlyEditorProvider {
 
 	constructor(private context: vscode.ExtensionContext) { }
 
-	bindCustomEditors(viewOption: { webviewOptions: vscode.WebviewPanelOptions }) {
-		return [
-			vscode.window.registerCustomEditorProvider('cweijan.officeViewer', this, viewOption),
-			vscode.window.registerCustomEditorProvider('cweijan.htmlViewer', this, viewOption),
-			vscode.window.registerCustomEditorProvider('cweijan.imageViewer', this, viewOption),
-			vscode.window.registerCustomEditorProvider('cweijan.parquetViewer', this, viewOption),
-		];
+	bindCustomEditor(viewOption: { webviewOptions: vscode.WebviewPanelOptions }) {
+		return vscode.window.registerCustomEditorProvider(VIEW_TYPE, this, viewOption);
 	}
 
 	public openCustomDocument(uri: vscode.Uri, openContext: vscode.CustomDocumentOpenContext, token: vscode.CancellationToken): vscode.CustomDocument | Thenable<vscode.CustomDocument> {
 		return { uri, dispose: (): void => { } };
 	}
+
 	public resolveCustomEditor(document: vscode.CustomDocument, webviewPanel: vscode.WebviewPanel, token: vscode.CancellationToken): void | Thenable<void> {
 		const uri = document.uri;
 		const webview = webviewPanel.webview;
@@ -38,103 +30,41 @@ export class OfficeViewerProvider implements vscode.CustomReadonlyEditorProvider
 			localResourceRoots: [...getExtensionResourceRoots(this.context), folderPath],
 		};
 
-		const handler = Handler.bind(webviewPanel, uri);
-
-		let route: string;
+		let route: string | undefined;
 		const suffix = getFileSuffix(uri.fsPath);
-		const isSvg = /\.svg$/i.test(suffix);
-		handleCommonEvent(uri, handler, isSvg ? { skipOpen: true } : undefined);
-		if (isSvg) {
-			route = 'svg';
-			handleSvg(handler, uri);
-		} else if (isImage(suffix)) {
-			handleImage(handler, uri, webview);
-			route = 'image';
-		}
 		switch (suffix) {
 			case '.xlsx':
 			case '.xlsm':
-			case '.xls':
 			case '.csv':
 			case '.tsv':
-			case '.ods':
 				route = 'excel';
 				break;
 			case '.docx':
 			case '.dotx':
 				route = 'word';
 				break;
-			case '.pptx':
-			case '.pptm':
-				route = 'ppt';
-				break;
-			case '.ttf':
-			case '.woff':
-			case '.woff2':
-			case '.otf':
-				route = 'font';
-				break;
 			case '.pdf':
-				void this.loadPdfViewer(webview);
 				break;
-			case '.epub':
-				route = 'epub';
-				break;
-			case '.icns':
-				route = 'icns';
-				break;
-			case '.psd':
-				route = 'psd';
-				break;
-			case '.xmind':
-				route = 'xmind';
-				break;
-			case '.parquet':
-				route = 'parquet';
-				break;
-			case '.htm':
-			case '.html':
-			case '.xhtml':
-				if (isVirtualUri(uri)) {
-					void this.loadVirtualHtml(webviewPanel, uri, folderPath);
-				} else {
-					void this.loadWorkspaceHtml(webviewPanel, uri, folderPath);
-				}
-				break;
-			default:
-				if (route) break;
-				vscode.commands.executeCommand('vscode.openWith', uri, 'default');
+			default: {
+				const message = `Office Viewer (Hardened) does not support "${suffix || 'this'}" files.`;
+				webview.options = { enableScripts: false, localResourceRoots: [] };
+				webview.html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none';"></head><body><p>${escapeHtml(message)}</p></body></html>`;
+				void vscode.window.showErrorMessage(message);
+				return;
+			}
 		}
-		const fileType = suffix.startsWith('.') ? suffix.slice(1) : suffix;
-		TelemetryService.get()?.trackOfficeViewOpen(uri.fsPath, route, fileType);
-		if (route) return ReactApp.view(webview, { route });
+
+		const handler = Handler.bind(webviewPanel, uri);
+		handleCommonEvent(uri, handler);
+		if (route) {
+			return ReactApp.view(webview, { route });
+		}
+		return this.loadPdfViewer(webview);
 	}
 
 	private async loadPdfViewer(webview: vscode.Webview) {
 		const html = await readExtensionText(this.context, 'resource', 'pdf', 'viewer.html');
 		webview.html = html.replace('{{baseUrl}}', this.getBaseUrl(webview, 'pdf'));
-	}
-
-	private async loadWorkspaceHtml(webviewPanel: vscode.WebviewPanel, uri: vscode.Uri, folderPath: vscode.Uri) {
-		const webview = webviewPanel.webview;
-		const render = async () => {
-			const content = await readUriText(uri);
-			webview.html = Util.buildPath(content, webview, folderPath);
-		};
-		await render();
-		Util.listen(webviewPanel, uri, () => {
-			void render();
-		});
-	}
-
-	private async loadVirtualHtml(webviewPanel: vscode.WebviewPanel, uri: vscode.Uri, folderPath: vscode.Uri) {
-		try {
-			const content = await readUriText(uri);
-			webviewPanel.webview.html = Util.buildPath(content, webviewPanel.webview, folderPath);
-		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Failed to read HTML';
-			webviewPanel.webview.html = `<pre>${message}</pre>`;
-		}
 	}
 
 	private getBaseUrl(webview: vscode.Webview, path: string) {
@@ -143,4 +73,8 @@ export class OfficeViewerProvider implements vscode.CustomReadonlyEditorProvider
 		return baseUrl;
 	}
 
+}
+
+function escapeHtml(value: string): string {
+	return value.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] as string));
 }
