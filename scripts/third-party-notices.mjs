@@ -38,7 +38,12 @@ const vendored = [
     { name: 'vite (build-time runtime helpers)', version: readVersion('vite'), licence: 'MIT', file: 'node_modules/vite/LICENSE.md' },
     { name: 'rolldown (build-time runtime helpers)', version: readVersion('rolldown'), licence: 'MIT', file: 'node_modules/rolldown/LICENSE' },
     { name: 'esbuild (build-time runtime helpers)', version: readVersion('esbuild'), licence: 'MIT', file: 'node_modules/esbuild/LICENSE.md' },
-].filter((v) => existsSync(join(root, v.file)));
+];
+const absent = vendored.filter((v) => !existsSync(join(root, v.file)) || !readFileSync(join(root, v.file), 'utf8').trim());
+if (absent.length) {
+    console.error(`Missing or empty licence file: ${absent.map((v) => v.file).join(', ')}`);
+    process.exit(1);
+}
 
 function readVersion(name) {
     try {
@@ -64,7 +69,7 @@ const section = (title, licence, texts) => {
 for (const v of vendored) section(`${v.name} ${v.version}`, v.licence, [readFileSync(join(root, v.file), 'utf8').trim()]);
 for (const p of [...packages.values()].sort((a, b) => a.name.localeCompare(b.name))) section(`${p.name} ${p.version}`, p.licence, p.texts);
 
-const missing = [...packages.values()].filter((p) => p.texts.length === 0).map((p) => `${p.name}@${p.version}`);
+const missing = [...packages.values()].filter((p) => !p.texts.some((t) => t.length > 0)).map((p) => `${p.name}@${p.version}`);
 if (missing.length) {
     console.error(`No licence text for: ${missing.join(', ')}. Add scripts/licence-overrides/<name>.txt.`);
     process.exit(1);

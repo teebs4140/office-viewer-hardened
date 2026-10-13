@@ -69,7 +69,7 @@ The full diff from upstream is `git diff upstream-4.2.0..main`.
 - PDF links that pdf.js clones for annotations with several highlight areas had no click
   handler, so clicking them made the browser follow the fragment against `<base>` and leave the
   viewer. Every link click is now cancelled, and cloned internal links are navigated explicitly.
-  Middle-clicking an internal link no longer opens a new window.
+  Middle-clicking an internal link no longer opens a new window, in the PDF and Word viewers.
 - Copy from a filtered spreadsheet included the rows the filter hid, in both the plain-text and
   HTML clipboard formats. Both formats are now built from one matrix of the visible cells in
   display order, so they always agree. Merged blocks are reproduced only when no sort or filter is

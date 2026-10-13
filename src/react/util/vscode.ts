@@ -110,8 +110,10 @@ function interceptLinkClick(e: MouseEvent) {
         const href = node.getAttribute('href') ?? node.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
         if (href === null) continue;
         if (href.startsWith('#')) {
-            // In-document anchors (docx bookmarks) are handled by the viewer itself.
-            if (href === '#') e.preventDefault();
+            // In-document anchors (docx bookmarks) are handled by the viewer itself on a left
+            // click. A middle click has no such handler, and its default would resolve the
+            // fragment against <base>, so cancel it.
+            if (href === '#' || e.type === 'auxclick') e.preventDefault();
             return;
         }
         e.preventDefault();
