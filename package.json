@@ -32,6 +32,12 @@
     "url": "https://github.com/teebs4140/office-viewer-hardened.git"
   },
   "main": "./out/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": true
+  },
   "scripts": {
     "dev": "vite --mode=development",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
