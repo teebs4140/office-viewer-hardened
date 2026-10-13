@@ -19,6 +19,9 @@ export function arrayBufferFromPayload(payload: OfficeOpenPayload): ArrayBuffer 
 }
 
 export async function loadOfficeBuffer(payload: OfficeOpenPayload): Promise<ArrayBuffer> {
+    if (payload.error) {
+        throw new Error(payload.error);
+    }
     if (payload.buffer) {
         return arrayBufferFromPayload(payload);
     }

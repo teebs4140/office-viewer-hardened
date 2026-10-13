@@ -4,7 +4,7 @@
 //   node scripts/third-party-notices.mjs
 import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 
 const root = process.cwd();
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -19,7 +19,11 @@ for (const dir of parseable.split(/\r?\n/).filter(Boolean)) {
     const key = `${pkg.name}@${pkg.version}`;
     if (packages.has(key)) continue;
     const licenceFiles = readdirSync(dir).filter((f) => /^(licen[cs]e|copying|notice)(\..*)?$/i.test(f)).sort();
-    const texts = licenceFiles.map((f) => readFileSync(join(dir, f), 'utf8').trim());
+    let texts = licenceFiles.map((f) => readFileSync(join(dir, f), 'utf8').trim());
+    if (texts.length === 0) {
+        const override = join(root, 'scripts', 'licence-overrides', `${pkg.name.replace('/', '__')}.txt`);
+        if (existsSync(override)) texts = [readFileSync(override, 'utf8').trim()];
+    }
     const licence = typeof pkg.license === 'string' ? pkg.license : (pkg.license?.type ?? 'UNKNOWN');
     packages.set(key, { name: pkg.name, version: pkg.version, licence, texts });
 }
@@ -30,7 +34,19 @@ const vendored = [
     { name: 'pdf.js CMaps', version: '3.1.81', licence: 'see text', file: 'resource/pdf/cmaps/LICENSE' },
     { name: 'pdf.js standard fonts (Foxit)', version: '3.1.81', licence: 'see text', file: 'resource/pdf/standard_fonts/LICENSE_FOXIT' },
     { name: 'pdf.js standard fonts (Liberation)', version: '3.1.81', licence: 'see text', file: 'resource/pdf/standard_fonts/LICENSE_LIBERATION' },
+    // Build tools whose runtime helpers are emitted into the bundles (module preload, ESM interop).
+    { name: 'vite (build-time runtime helpers)', version: readVersion('vite'), licence: 'MIT', file: 'node_modules/vite/LICENSE.md' },
+    { name: 'rolldown (build-time runtime helpers)', version: readVersion('rolldown'), licence: 'MIT', file: 'node_modules/rolldown/LICENSE' },
+    { name: 'esbuild (build-time runtime helpers)', version: readVersion('esbuild'), licence: 'MIT', file: 'node_modules/esbuild/LICENSE.md' },
 ].filter((v) => existsSync(join(root, v.file)));
+
+function readVersion(name) {
+    try {
+        return JSON.parse(readFileSync(join(root, 'node_modules', name, 'package.json'), 'utf8')).version;
+    } catch {
+        return '';
+    }
+}
 
 const out = [
     '# Third-party notices',
@@ -43,11 +59,15 @@ const out = [
 ];
 const section = (title, licence, texts) => {
     out.push(`## ${title}`, '', `Licence: ${licence}`, '');
-    if (texts.length === 0) out.push('_No licence file is included in the package; see its licence identifier above._', '');
     for (const t of texts) out.push('```', t.replace(/```/g, "'''"), '```', '');
 };
 for (const v of vendored) section(`${v.name} ${v.version}`, v.licence, [readFileSync(join(root, v.file), 'utf8').trim()]);
 for (const p of [...packages.values()].sort((a, b) => a.name.localeCompare(b.name))) section(`${p.name} ${p.version}`, p.licence, p.texts);
 
+const missing = [...packages.values()].filter((p) => p.texts.length === 0).map((p) => `${p.name}@${p.version}`);
+if (missing.length) {
+    console.error(`No licence text for: ${missing.join(', ')}. Add scripts/licence-overrides/<name>.txt.`);
+    process.exit(1);
+}
 writeFileSync(join(root, 'THIRD_PARTY_NOTICES.md'), out.join('\n'));
-console.log(`THIRD_PARTY_NOTICES.md: ${vendored.length} vendored + ${packages.size} npm packages (${relative(root, root) || '.'})`);
+console.log(`THIRD_PARTY_NOTICES.md: ${vendored.length} vendored + ${packages.size} npm packages`);

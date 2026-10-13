@@ -71,18 +71,25 @@ The full diff from upstream is `git diff upstream-4.2.0..main`.
   viewer. Every link click is now cancelled, and cloned internal links are navigated explicitly.
   Middle-clicking an internal link no longer opens a new window.
 - Copy from a filtered spreadsheet included the rows the filter hid, in both the plain-text and
-  HTML clipboard formats. It now copies only visible rows, and a merged block is copied with its
-  value even when its first row is hidden.
+  HTML clipboard formats. Both formats are now built from one matrix of the visible cells in
+  display order, so they always agree. Merged blocks are reproduced only when no sort or filter is
+  active; a selection clipped inside a merge carries the merge's value.
 - `git:` and other virtual versions of `.pdf`, `.xlsx`, `.xlsm`, `.docx` and `.dotx` files are
   checked for the right file signature. VS Code's git provider can return text-converted content
-  (`git show --textconv`), and the viewer now says so instead of failing to parse it.
+  (`git show --textconv`), and the viewer now shows that error instead of failing to parse it.
+- PDF links with an empty target (named actions such as NextPage) could still navigate the viewer.
+  Every link's default action is now cancelled, and pdf.js copies the link handler onto every
+  highlight area of a multi-area link.
 
 ### Build
 
 - `package-lock.json` is committed, and builds use `npm ci --ignore-scripts`. Upstream ignored its
   lockfile.
 - CI builds, type-checks and packages with lifecycle scripts disabled.
-- `THIRD_PARTY_NOTICES.md` ships the licence text of every bundled component, including the
-  vendored pdf.js (Apache-2.0) and x-spreadsheet (MIT).
+- `THIRD_PARTY_NOTICES.md` ships the licence text of every bundled component: the vendored
+  pdf.js (Apache-2.0) and x-spreadsheet (MIT), the build tools whose runtime helpers are emitted,
+  and every production npm package. Licence texts missing from npm tarballs come from the
+  packages' source repositories (`scripts/licence-overrides/`). CI fails if the file is out of date.
+- Unit tests for the spreadsheet copy matrix (`test/unit/`).
 - Added a headless-Chromium webview test harness with benign and hostile fixtures in
   `test/webview-harness/` and `test/fixtures/`. It is not shipped in the VSIX.

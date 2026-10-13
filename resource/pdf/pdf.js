@@ -10707,6 +10707,11 @@ class LinkAnnotationElement extends AnnotationElement {
     if (this.quadrilaterals) {
       return this._renderQuadrilaterals("linkAnnotation").map((quadrilateral, index) => {
         const linkElement = index === 0 ? link : link.cloneNode();
+        // cloneNode() drops the onclick property, so every area after the first would lose the
+        // link's action (hardened fork).
+        if (index > 0 && typeof link.onclick === "function") {
+          linkElement.onclick = link.onclick;
+        }
         quadrilateral.append(linkElement);
         return quadrilateral;
       });

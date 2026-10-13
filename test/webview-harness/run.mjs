@@ -731,7 +731,7 @@ async function testPdf(page, t, fx) {
                 const a = e.target instanceof Element ? e.target.closest('a') : null;
                 if (a) {
                     window.__ovh.linkEvents.push({
-                        type: e.type, button: e.button, href: a.getAttribute('href'), pdfjsOnclick: typeof a.onclick === 'function', prevented: e.defaultPrevented,
+                        type: e.type, button: e.button, href: a.getAttribute('href'), pdfjsOnclick: typeof a.onclick === 'function', target: a.dataset.ovhTarget === '1', prevented: e.defaultPrevented,
                     });
                 }
             };
@@ -752,15 +752,19 @@ async function testPdf(page, t, fx) {
             const anchor = sec.locator('a');
             if (link.anchor) {
                 // The fixture has to reproduce the case under test: pdf.js binds onclick on the first
-                // area's <a> only; the other /QuadPoints areas get a clone without it.
+                // area's <a> only; upstream's other /QuadPoints areas got a clone without it.
                 const a = annots[link.index] ?? {};
-                t.check(`${link.name}: <a href="#..."> ${link.anchor === 'clone' ? 'without' : 'with'} pdf.js onclick`,
-                    (a.href ?? '').startsWith('#') && a.href.length > 1 && a.onclick === (link.anchor === 'bound'), JSON.stringify(a));
+                // The fork copies pdf.js' onclick onto cloned areas, so both kinds must carry it.
+                t.check(`${link.name}: <a href="#..."> with pdf.js onclick`,
+                    (a.href ?? '').startsWith('#') && a.href.length > 1 && a.onclick === true, JSON.stringify(a));
             }
             const eventsBefore = await page.evaluate(() => window.__ovh.linkEvents.length);
             const pageBefore = (await viewerState()).page;
-            if (await anchor.count()) await anchor.click({ force: true });
-            else await sec.click({ force: true });
+            if (await anchor.count()) {
+                await anchor.evaluate((el) => { el.dataset.ovhTarget = '1'; });
+                await anchor.click({ force: true });
+                await anchor.evaluate((el) => { delete el.dataset.ovhTarget; }).catch(() => {});
+            } else await sec.click({ force: true });
             await sleep(500);
             const state = await viewerState();
             const sent = await page.evaluate((n) => window.__ovh.messages.slice(n), before).catch(() => null);
@@ -775,7 +779,7 @@ async function testPdf(page, t, fx) {
                 t.check(`${link.name} -> browser default (follow href) prevented`, clicks.length === 1 && clicks[0].prevented, JSON.stringify(clicks));
                 if (link.anchor) {
                     t.check(`${link.name} -> the click hit the ${link.anchor === 'clone' ? 'cloned' : 'pdf.js-bound'} <a>`,
-                        clicks.length === 1 && clicks[0].pdfjsOnclick === (link.anchor === 'bound'), JSON.stringify(clicks));
+                        clicks.length === 1 && clicks[0].target && clicks[0].pdfjsOnclick, JSON.stringify(clicks));
                 }
                 t.check(`${link.name} -> page did not navigate, viewer still loaded`, sameDocument(page.url()) && state.viewer, `${page.url()} ${JSON.stringify(state)}`);
                 t.check(`${link.name} -> posts no message`, Array.isArray(sent) && sent.length === 0, JSON.stringify(sent));

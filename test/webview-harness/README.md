@@ -37,9 +37,10 @@ zoom and links in Word; search, zoom, thumbnails and links in PDF.
 
 Two regression checks cover specific fixes:
 
-- **PDF links with several `/QuadPoints`** (`links.pdf`). pdf.js renders one `<a>` per area and
-  only the first gets its `onclick`; the others are clones. The harness first checks that the
-  fixture really produces a bound `<a>` and a clone, then left-clicks each area and checks that
+- **PDF links with several `/QuadPoints`** (`links.pdf`). pdf.js renders one `<a>` per area by
+  cloning the first. Upstream's clones lost the link's `onclick`; the fork copies it across. The
+  harness first checks that every area's `<a>` carries the handler, then left-clicks each area
+  (confirming the click landed on that area's own `<a>`) and checks that
   the browser's default action was prevented (a listener added after the viewer's own records
   `defaultPrevented`), the page did not navigate and the viewer is still loaded, nothing was
   posted to the host, and the viewer moved from page 1 to page 2. It does this for an explicit

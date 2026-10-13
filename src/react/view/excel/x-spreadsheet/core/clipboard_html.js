@@ -186,54 +186,80 @@ function formatCellHtml(text, style, defaultStyle, extraAttrs = '') {
 }
 
 /**
- * Serialize a selected range to HTML table for system clipboard (Excel / WPS).
+ * The cells a copy of `range` contains, as the user sees them: rows hidden by an autofilter are
+ * left out and sorted rows come in display order. Both clipboard formats are built from this one
+ * matrix so they always agree.
+ *
+ * Merged blocks are only reproduced when no sort or filter is active. Merges are stored in data
+ * coordinates; once rows are reordered or hidden they no longer describe the displayed grid, so
+ * each cell is then copied with its own value instead.
+ * Each entry is { text, style, rowspan, colspan } or { covered: true } for cells under a merge.
  */
-export function formatHtmlClipboard(data, range) {
+export function selectedCellMatrix(data, range) {
   const {
     sri, eri, sci, eci,
   } = range;
-  const defaultStyle = data.defaultStyle();
-  const rows = [];
-
   const hidden = data.exceptRowSet || new Set();
-  const visibleRowsBetween = (from, to) => {
-    let n = 0;
-    for (let r = from; r <= to; r += 1) if (!hidden.has(r)) n += 1;
-    return n;
-  };
+  const sorted = data.sortedRowMap && data.sortedRowMap.size > 0;
+  const useMerges = hidden.size === 0 && !sorted;
+  const matrix = [];
 
   for (let ri = sri; ri <= eri; ri += 1) {
-    // Rows hidden by an autofilter are not part of what the user sees, so don't copy them.
     if (hidden.has(ri)) continue;
-    let rowHtml = '<tr>';
+    const row = [];
     for (let ci = sci; ci <= eci; ci += 1) {
-      const merge = data.merges.getFirstIncludes(ri, ci);
-      // A merge is emitted from its first visible row; later rows of it are covered by rowspan.
-      const mergeStart = merge ? Math.max(merge.sri, sri) : ri;
-      const firstVisible = merge && hidden.has(mergeStart)
-        ? (() => { let r = mergeStart; while (r < ri && hidden.has(r)) r += 1; return r; })()
-        : mergeStart;
-      if (merge && (firstVisible !== ri || Math.max(merge.sci, sci) !== ci)) {
+      const merge = useMerges ? data.merges.getFirstIncludes(ri, ci) : null;
+      if (!merge) {
+        row.push({
+          text: data.getCellTextOrDefault(ri, ci),
+          style: data.getCellStyleOrDefault(ri, ci),
+          rowspan: 1,
+          colspan: 1,
+        });
         continue;
       }
-      // A merged block's value and style live in its top-left cell, which may be hidden or
-      // outside the selection.
-      const style = merge ? data.getCellStyleOrDefault(merge.sri, merge.sci) : data.getCellStyleOrDefault(ri, ci);
-      const text = merge ? data.getCellTextOrDefault(merge.sri, merge.sci) : data.getCellTextOrDefault(ri, ci);
-      let extraAttrs = '';
-      if (merge) {
-        const rowspan = visibleRowsBetween(ri, Math.min(merge.eri, eri));
-        const colspan = Math.min(merge.eci, eci) - ci + 1;
-        const attrs = [];
-        if (rowspan > 1) attrs.push(`rowspan="${rowspan}"`);
-        if (colspan > 1) attrs.push(`colspan="${colspan}"`);
-        if (attrs.length > 0) extraAttrs = ` ${attrs.join(' ')}`;
+      // A merge clipped by the selection is emitted from the selection's corner of it, carrying
+      // the value and style of the merge's own top-left cell.
+      const anchorRi = Math.max(merge.sri, sri);
+      const anchorCi = Math.max(merge.sci, sci);
+      if (ri !== anchorRi || ci !== anchorCi) {
+        row.push({ covered: true });
+        continue;
       }
-      rowHtml += formatCellHtml(text, style, defaultStyle, extraAttrs);
+      row.push({
+        text: data.getCellTextOrDefault(merge.sri, merge.sci),
+        style: data.getCellStyleOrDefault(merge.sri, merge.sci),
+        rowspan: Math.min(merge.eri, eri) - ri + 1,
+        colspan: Math.min(merge.eci, eci) - ci + 1,
+      });
     }
-    rowHtml += '</tr>';
-    rows.push(rowHtml);
+    matrix.push(row);
   }
+  return matrix;
+}
+
+/** Plain-text rows for the system clipboard: cells under a merge are empty. */
+export function textRowsFromMatrix(matrix) {
+  return matrix.map(row => row.map(cell => (cell.covered ? '' : cell.text)));
+}
+
+/**
+ * Serialize a selected range to HTML table for system clipboard (Excel / WPS).
+ */
+export function formatHtmlClipboard(data, range, matrix = selectedCellMatrix(data, range)) {
+  const defaultStyle = data.defaultStyle();
+  const rows = matrix.map((row) => {
+    let rowHtml = '<tr>';
+    row.forEach((cell) => {
+      if (cell.covered) return;
+      const attrs = [];
+      if (cell.rowspan > 1) attrs.push(`rowspan="${cell.rowspan}"`);
+      if (cell.colspan > 1) attrs.push(`colspan="${cell.colspan}"`);
+      const extraAttrs = attrs.length > 0 ? ` ${attrs.join(' ')}` : '';
+      rowHtml += formatCellHtml(cell.text, cell.style, defaultStyle, extraAttrs);
+    });
+    return `${rowHtml}</tr>`;
+  });
 
   const table = `<table>${rows.join('')}</table>`;
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${table}</body></html>`;

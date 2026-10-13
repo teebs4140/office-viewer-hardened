@@ -5,7 +5,9 @@ import Scroll from './scroll';
 import History from './history';
 import Clipboard from './clipboard';
 import { formatTsvRows, parseTsvRows } from './clipboard_text';
-import { formatHtmlClipboard, parseHtmlClipboard } from './clipboard_html';
+import {
+  formatHtmlClipboard, parseHtmlClipboard, selectedCellMatrix, textRowsFromMatrix,
+} from './clipboard_html';
 import AutoFilter from './auto_filter';
 import { Merges } from './merge';
 import helper from './helper';
@@ -635,26 +637,14 @@ export default class DataProxy {
   }
 
   copyToSystemClipboard(evt) {
-    let copyText = [];
-    const {
-      sri, eri, sci, eci,
-    } = this.selector.range;
-
-    for (let ri = sri; ri <= eri; ri += 1) {
-      // Rows hidden by an autofilter are not part of what the user sees, so don't copy them.
-      if (this.exceptRowSet.has(ri)) continue;
-      const nri = getDataRowIndex(this, ri);
-      const row = [];
-      for (let ci = sci; ci <= eci; ci += 1) {
-        const cell = this.rows.getCell(nri, ci);
-        row.push((cell && cell.text) || '');
-      }
-      copyText.push(row);
-    }
+    // Hidden (filtered) rows are skipped and sorted rows follow the display order; see
+    // selectedCellMatrix.
+    const matrix = selectedCellMatrix(this, this.selector.range);
+    let copyText = textRowsFromMatrix(matrix);
 
     // Adding \n and why not adding \r\n is to support online office and client MS office and WPS
     copyText = formatTsvRows(copyText);
-    const copyHtml = formatHtmlClipboard(this, this.selector.range);
+    const copyHtml = formatHtmlClipboard(this, this.selector.range, matrix);
 
     // why used this
     // cuz http protocol will be blocked request clipboard by browser

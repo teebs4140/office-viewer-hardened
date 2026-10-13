@@ -31,8 +31,17 @@ export async function readUriBytes(uri: Uri): Promise<Uint8Array> {
 const ZIP_SIGNATURE = [0x50, 0x4b, 0x03, 0x04]; // "PK\x03\x04": xlsx, xlsm, docx, dotx
 const PDF_SIGNATURE = [0x25, 0x50, 0x44, 0x46, 0x2d]; // "%PDF-"
 
-function startsWith(data: Uint8Array, signature: number[]): boolean {
-    return data.length >= signature.length && signature.every((byte, i) => data[i] === byte);
+function startsWith(data: Uint8Array, signature: number[], offset = 0): boolean {
+    return data.length >= offset + signature.length && signature.every((byte, i) => data[offset + i] === byte);
+}
+
+/** pdf.js accepts a PDF header anywhere in the first 1024 bytes, so allow the same here. */
+function hasPdfHeader(data: Uint8Array): boolean {
+    const limit = Math.min(1024, data.length - PDF_SIGNATURE.length);
+    for (let offset = 0; offset <= limit; offset++) {
+        if (startsWith(data, PDF_SIGNATURE, offset)) return true;
+    }
+    return false;
 }
 
 /**
@@ -42,10 +51,10 @@ function startsWith(data: Uint8Array, signature: number[]): boolean {
  */
 function checkBinarySignature(uri: Uri, data: Uint8Array): void {
     const ext = extname(uri.path).toLowerCase();
-    const signature = ext === '.pdf' ? PDF_SIGNATURE
-        : ['.xlsx', '.xlsm', '.docx', '.dotx'].includes(ext) ? ZIP_SIGNATURE
-            : undefined;
-    if (signature && !startsWith(data, signature)) {
+    const ok = ext === '.pdf' ? hasPdfHeader(data)
+        : ['.xlsx', '.xlsm', '.docx', '.dotx'].includes(ext) ? startsWith(data, ZIP_SIGNATURE)
+            : true;
+    if (!ok) {
         throw new Error(`This ${uri.scheme}: version of ${basename(uri.path)} did not arrive as a ${ext} file `
             + '(a git text-conversion driver may have converted it). Open the file from disk instead.');
     }

@@ -17,6 +17,9 @@ jobs:
     # Lifecycle scripts are disabled for every install.
     - run: npm ci --ignore-scripts
     - run: npx tsc --noEmit -p .
+    - run: node --test test/unit/*.test.mjs
+    # THIRD_PARTY_NOTICES.md must match the lockfile.
+    - run: node scripts/third-party-notices.mjs && git diff --exit-code THIRD_PARTY_NOTICES.md
     - run: npx vite build --mode=production
     - run: npx --yes @vscode/vsce@3 package --no-dependencies
     - run: sha256sum office-viewer-hardened-*.vsix

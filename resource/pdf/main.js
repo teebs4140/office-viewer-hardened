@@ -472,19 +472,16 @@
     if (window.PDFViewerApplication?.secondaryToolbar?.isOpen) {
       PDFViewerApplication.secondaryToolbar.close();
     }
-    const raw = link.getAttribute('href');
-    if (!raw) {
-      return;
-    }
-    // Never let the browser follow a link: a fragment resolves against <base>, which would
-    // navigate away from the viewer.
+    // Never let the browser follow a link: an empty or fragment href resolves against <base>,
+    // which would navigate away from the viewer.
     event.preventDefault();
-    if (event.type !== 'click' || event.button !== 0) {
+    const raw = link.getAttribute('href');
+    if (!raw || event.type !== 'click' || event.button !== 0) {
       return;
     }
     if (raw.startsWith('#')) {
-      // pdf.js' own onclick has already handled the link. Copies made for annotations with
-      // several /QuadPoints are cloned without that handler, so navigate for them here.
+      // pdf.js' own onclick has already handled the link (cloned /QuadPoints areas keep it, see
+      // pdf.js LinkAnnotationElement). This is only a fallback for an anchor without a handler.
       if (typeof link.onclick !== 'function' && raw.length > 1) {
         window.PDFViewerApplication?.pdfLinkService?.setHash(raw.substring(1));
       }
@@ -524,12 +521,26 @@
     return null;
   }
 
+  function showLoadError(message) {
+    let box = document.getElementById('officeViewerHardenedError');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'officeViewerHardenedError';
+      box.setAttribute('role', 'alert');
+      box.style.cssText = 'position:fixed;top:48px;left:16px;right:16px;z-index:100000;padding:12px 16px;'
+        + 'background:#5a1d1d;color:#fff;border:1px solid #be1100;border-radius:4px;font:13px/1.4 sans-serif;';
+      document.body.append(box);
+    }
+    box.textContent = message;
+  }
+
   function openPdfDocument(payload) {
     if (!payload) {
       return;
     }
     if (payload.error) {
       console.error(payload.error);
+      showLoadError(String(payload.error));
       return;
     }
     const data = toUint8Array(payload.buffer);
